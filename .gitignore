@@ -1,0 +1,12 @@
+# ignore pycharm files
+*.iml
+.idea
+
+# ignore virtualenv
+venv/
+
+# ignore pycache
+__pycache__/
+
+# ignore dist
+dist/
