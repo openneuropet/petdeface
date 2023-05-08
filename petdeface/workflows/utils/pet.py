@@ -2,6 +2,8 @@ import json
 from niworkflows.interfaces.bids import ReadSidecarJSON
 import nibabel as nib
 import numpy as np
+import os
+from pathlib import Path
 
 def create_weighted_average_pet(pet_file, bids_dir):
     
@@ -28,10 +30,13 @@ def create_weighted_average_pet(pet_file, bids_dir):
 
     frames = range(data.shape[-1])
 
+    new_pth = os.getcwd()
+
     mid_frames = frames_start + frames_duration/2
     wavg = np.trapz(data[..., frames], dx=np.diff(mid_frames[frames]), axis=3)/np.sum(mid_frames)
 
-    out_file = pet_file.replace('_pet.', '_desc-wavg_pet.')
+    out_name = Path(pet_file.replace('_pet.', '_desc-wavg_pet.')).name
+    out_file = os.path.join(new_pth, out_name)    
     nib.save(nib.Nifti1Image(wavg, img.affine), out_file)
 
     return out_file
