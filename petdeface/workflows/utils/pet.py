@@ -14,8 +14,8 @@ def create_weighted_average_pet(pet_file, bids_dir):
     ---------
     pet_file: string
         path to input dynamic PET volume
-    json_file: string
-        path to PET json file containing timing information
+    bids_dir: string
+        path to BIDS directory containing the PET file
     """     
       
     img = nib.load(pet_file)        
