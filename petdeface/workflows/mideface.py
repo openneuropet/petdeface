@@ -12,18 +12,16 @@ class MidefaceInputSpec(CommandLineInputSpec):
     in_file = File(
         desc="Volume to deface",
         exists=True,
-        mandatory=True,
         argstr="--i %s",
     )
     out_file = File(
         desc="Defaced input",
-        mandatory=True,
         argstr="--o %s",
         name_source=["in_file"],
         name_template="%s_defaced",
         output_name="out_file",
     )
-    facemask = File(
+    out_facemask = File(
         desc="Facemask",
         argstr="--facemask %s",
     )
@@ -138,10 +136,9 @@ class MidefaceInputSpec(CommandLineInputSpec):
         desc="Set Xvfb display number for taking pics",
         argstr="--display %d",
     )
-    apply = traits.Tuple(
-        File, File, File, File,
+    apply = traits.Str(
         desc="Apply midface output to a second volume",
-        argstr="--apply %s %s %s %s",
+        argstr="--apply %s",
     )
     check = traits.Tuple(
         File, File,
@@ -150,8 +147,8 @@ class MidefaceInputSpec(CommandLineInputSpec):
     )
 
 class MidefaceOutputSpec(TraitedSpec):
-    out_file = File(desc="Defaced input", exists=True)
-    out_facemask = File(desc="Facemask", exists=True)
+    out_file = File(desc="Defaced input")
+    out_facemask = File(desc="Facemask")
 
 class Mideface(CommandLine):
     _cmd = "mideface"
@@ -161,5 +158,6 @@ class Mideface(CommandLine):
     def _list_outputs(self):
         outputs = self.output_spec().get()
         outputs["out_file"] = os.path.abspath(self.inputs.out_file)
+        outputs["out_facemask"] = os.path.abspath(self.inputs.out_facemask)
         return outputs
    
