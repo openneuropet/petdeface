@@ -51,9 +51,12 @@ RUN cd /project && \
 # copy the rest of the project
 COPY ./petdeface /project/petdeface
 
+# instal python2
+RUN yum -y install python2
+
 # install fsl
-COPY fslinstaller.py /
-RUN python3 /fslinstaller.py
+COPY fslinstaller.py /fslinstaller.py
+RUN /usr/bin/python2 /fslinstaller.py --dest /usr/local/fsl
 
 # setup fs env
 ENV PATH="/usr/local/freesurfer/bin:/usr/local/freesurfer/fsfast/bin:/usr/local/freesurfer/tktools:/usr/local/freesurfer/mni/bin:$PATH" \
