@@ -1,45 +1,35 @@
-# Use the official Python base image for x86_64
-FROM --platform=linux/x86_64 python:3.9
+# docker build for distributing a base fs 7.3.0 container
+FROM --platform=linux/amd64 martinnoergaard/petprep_hmc
 
-# Download QEMU for cross-compilation
-ADD https://github.com/multiarch/qemu-user-static/releases/download/v6.1.0-8/qemu-x86_64-static /usr/bin/qemu-x86_64-static
-RUN chmod +x /usr/bin/qemu-x86_64-static
+# set bash as default terminal
+SHELL ["/bin/bash", "-ce"]
 
-# Install required dependencies for FSL and Freesurfer
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    curl \
-    ca-certificates \
-    git \
-    tcsh \
-    xfonts-base \
-    gfortran \
-    libjpeg62 \
-    libtiff5-dev \
-    libpng-dev \
-    unzip \
-    libxext6 \
-    libx11-6 \
-    libxmu6 \
-    libglib2.0-0 \
-    libxft2 \
-    libxrender1 \
-    libxt6
+# shell settings
+WORKDIR /root
 
-# Install Freesurfer
-ENV FREESURFER_HOME="/opt/freesurfer" \
-    PATH="/opt/freesurfer/bin:$PATH"
+# create directories for mounting input, output and project volumes
+RUN mkdir -p /input /output /project/petdeface
 
-RUN curl -sL https://surfer.nmr.mgh.harvard.edu/pub/dist/freesurfer/7.3.2/freesurfer-linux-centos7_x86_64-7.3.2.tar.gz | tar xzC /opt && \
-    echo ". /opt/freesurfer/SetUpFreeSurfer.sh" >> ~/.bashrc
+# install poetry and insert poetry into bash rc
+RUN curl -sSL https://install.python-poetry.org | python3 - && \
+    echo export PATH="/root/.local/bin:$PATH" >> ~/.bashrc && \
+    export PATH="/root/.local/bin:$PATH" && \
+    /bin/bash -c "source ~/.bashrc"
 
-# Install BIDS application and its dependencies
-RUN pip3 install numpy nibabel pybids bids-validator
+ENV PATH="/root/.local/bin:$PATH"
 
-# Clone and install petprep_hmc from GitHub
-RUN git clone https://github.com/bendhouseart/petdeface.git /opt/petdeface
-RUN pip3 install --no-cache-dir -e /opt/petdeface
+# copy poetry.lock and pyproject.toml
+COPY poetry.lock pyproject.toml /project/
 
-# BIDS App entry point
-ENTRYPOINT ["python3", "/opt/petdeface/run.py"]
-CMD ["--help"]
+# convert poetry.lock to requirements.txt and install dependencies,
+# this may not be required for later versions of python as they 
+# should be able to handle pip install . 
+RUN cd /project && \
+    poetry export -f requirements.txt > requirements.txt && \
+    pip3 install -r /project/requirements.txt
+
+# copy the rest of the project
+COPY ./petdeface /project/petdeface
+
+ENTRYPOINT ["/usr/bin/env"]
+CMD ["python3", "/project/petdeface/run.py"]
