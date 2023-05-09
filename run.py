@@ -128,6 +128,7 @@ def create_apply_str(t1w_defaced, pet_file, facemask, lta_file, bids_dir):
     """Create string to be used for the --apply flag for defacing PET using mideface."""
     from pathlib import Path
     from bids.layout import BIDSLayout
+    import shutil
 
     layout = BIDSLayout(bids_dir)
     entities = layout.parse_file_entities(pet_file)
