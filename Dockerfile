@@ -21,7 +21,9 @@ ENV PATH="/root/.local/bin:$PATH"
 # copy poetry.lock and pyproject.toml
 COPY poetry.lock pyproject.toml /project/
 
-# convert poetry.lock to requirements.txt and install dependencies
+# convert poetry.lock to requirements.txt and install dependencies,
+# this may not be required for later versions of python as they 
+# should be able to handle pip install . 
 RUN cd /project && \
     poetry export -f requirements.txt > requirements.txt && \
     pip3 install -r /project/requirements.txt
@@ -31,4 +33,3 @@ COPY ./petdeface /project/petdeface
 
 ENTRYPOINT ["/usr/bin/env"]
 CMD ["python3", "/project/petdeface/run.py"]
-
