@@ -244,13 +244,13 @@ if __name__ == "__main__":
         if check_valid_fs_license():
             license_location = locate_freesurfer_license()
             if license_location:
-                docker_command += f"-v {license_location}:/usr/local/freesurfer/license.txt "
+                docker_command += f"-v {license_location}:/opt/freesurfer/license.txt "
 
         # specify platform
         docker_command += f"--platform linux/amd64 "
 
         docker_command += f"petdeface:latest " \
-                          f"python3.9 /project/petdeface/run.py {args_string}"
+                          f"python3 /project/petdeface/run.py {args_string}"
 
         print("Running docker command: \n{}".format(docker_command))
 
