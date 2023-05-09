@@ -30,5 +30,5 @@ RUN cd /project && \
 COPY ./petdeface /project/petdeface
 
 ENTRYPOINT ["/usr/bin/env"]
-CMD ["python3", "/project/petdeface/petdeface.py"]
+CMD ["python3", "/project/petdeface/run.py"]
 
