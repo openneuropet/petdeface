@@ -8,6 +8,10 @@ readme = "README.md"
 
 [tool.poetry.dependencies]
 python = ">=3.8"
+nibabel = "^5.1.0"
+nipype = "^1.8.6"
+pybids = "^0.16.1"
+niworkflows = "^1.7.9"
 
 
 [build-system]
