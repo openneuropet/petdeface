@@ -55,7 +55,7 @@ def main(args):
     else:
         infosource.iterables = [('subject_id', args.participant_label)]
 
-    templates = {'t1w_file': 'sub-{subject_id}/anat/*_T1w.[n]*' if not sessions else 'sub-{subject_id}/ses-{session_id}/anat/*_T1w.[n]*',
+    templates = {'t1w_file': 'sub-{subject_id}/anat/*_T1w.[n]*' if not sessions else 'sub-{subject_id}/*/anat/*_T1w.[n]*',
                 'pet_file': 'sub-{subject_id}/pet/*_pet.[n]*' if not sessions else 'sub-{subject_id}/ses-{session_id}/pet/*_pet.[n]*',
                 'json_file': 'sub-{subject_id}/pet/*_pet.json' if not sessions else 'sub-{subject_id}/ses-{session_id}/pet/*_pet.json'}
            
