@@ -138,7 +138,7 @@ def create_apply_str(t1w_defaced, pet_file, facemask, lta_file, bids_dir):
     out_file = f"{bids_dir}/derivatives/petdeface/sub-{subject}/ses-{session}/pet/sub-{subject}_ses-{session}_desc-defaced_pet.nii.gz"
 
     out_lta_file = f"{bids_dir}/derivatives/petdeface/sub-{subject}/ses-{session}/pet/sub-{subject}_ses-{session}_desc-pet2anat_pet.lta"
-    out_mask_file = f"{bids_dir}/derivatives/petdeface/sub-{subject}/ses-{session}/anat/sub-{subject}_ses-{session}_desc-defaced_pet_mask.nii.gz"
+    out_mask_file = f"{bids_dir}/derivatives/petdeface/sub-{subject}/ses-{session}/anat/sub-{subject}_ses-{session}_desc-defaced_mask.mgz"
     out_t1w_defaced = f"{bids_dir}/derivatives/petdeface/sub-{subject}/ses-{session}/anat/sub-{subject}_ses-{session}_desc-defaced_T1w.nii.gz"
 
     Path(out_file).parent.mkdir(parents=True, exist_ok=True)
