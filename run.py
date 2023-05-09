@@ -99,7 +99,7 @@ def main(args):
                                odir = '.'),
                  name = 'deface_pet')
     
-    create_apply_str_node = Node(Function(input_names=['facemask', 'lta_file', 'pet_file', 'bids_dir'],
+    create_apply_str_node = Node(Function(input_names=['t1w_defaced','facemask', 'lta_file', 'pet_file', 'bids_dir'],
                                         output_names=['apply_str'],
                                         function=create_apply_str),
                                name='create_apply_str')
@@ -115,6 +115,7 @@ def main(args):
                         (deface_t1w, create_apply_str_node, [('out_facemask', 'facemask')]),
                         (coreg_pet_to_t1w, create_apply_str_node, [('out_lta_file', 'lta_file')]),
                         (selectfiles, create_apply_str_node, [('pet_file', 'pet_file')]),
+                        (deface_t1w, create_apply_str_node, [('out_file', 't1w_defaced')]),
                         (create_apply_str_node, deface_pet, [('apply_str', 'apply')])
                     ])
 
@@ -123,7 +124,7 @@ def main(args):
     # remove temp outputs
     shutil.rmtree(os.path.join(args.bids_dir, 'deface_pet_workflow'))
 
-def create_apply_str(pet_file, facemask, lta_file, bids_dir):
+def create_apply_str(t1w_defaced, pet_file, facemask, lta_file, bids_dir):
     """Create string to be used for the --apply flag for defacing PET using mideface."""
     from pathlib import Path
     from bids.layout import BIDSLayout
@@ -135,7 +136,19 @@ def create_apply_str(pet_file, facemask, lta_file, bids_dir):
     session = entities['session']
     out_file = f"{bids_dir}/derivatives/petdeface/sub-{subject}/ses-{session}/pet/sub-{subject}_ses-{session}_desc-defaced_pet.nii.gz"
 
+    out_lta_file = f"{bids_dir}/derivatives/petdeface/sub-{subject}/ses-{session}/pet/sub-{subject}_ses-{session}_desc-pet2anat_pet.lta"
+    out_mask_file = f"{bids_dir}/derivatives/petdeface/sub-{subject}/ses-{session}/anat/sub-{subject}_ses-{session}_desc-defaced_pet_mask.nii.gz"
+    out_t1w_defaced = f"{bids_dir}/derivatives/petdeface/sub-{subject}/ses-{session}/anat/sub-{subject}_ses-{session}_desc-defaced_T1w.nii.gz"
+
     Path(out_file).parent.mkdir(parents=True, exist_ok=True)
+    Path(out_lta_file).parent.mkdir(parents=True, exist_ok=True)
+    Path(out_mask_file).parent.mkdir(parents=True, exist_ok=True)
+    Path(out_t1w_defaced).parent.mkdir(parents=True, exist_ok=True)
+
+    shutil.copyfile(t1w_defaced, out_t1w_defaced)
+    shutil.copyfile(lta_file, out_lta_file)
+    shutil.copyfile(facemask, out_mask_file)
+
     apply_str = f"{pet_file} {facemask} {lta_file} {out_file}"
 
     return apply_str
