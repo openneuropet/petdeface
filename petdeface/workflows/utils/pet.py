@@ -1,12 +1,12 @@
-import json
-from niworkflows.interfaces.bids import ReadSidecarJSON
-import nibabel as nib
-import numpy as np
-import os
-from pathlib import Path
-
 def create_weighted_average_pet(pet_file, bids_dir):
-    
+
+    import json
+    from niworkflows.interfaces.bids import ReadSidecarJSON
+    import nibabel as nib
+    import numpy as np
+    import os
+    from pathlib import Path
+
     """
     Create a time-weighted average of dynamic PET data using mid-frames
     
