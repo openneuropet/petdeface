@@ -1,27 +1,44 @@
 import argparse
-import glob
-import re
 import shutil
-import json
 import os
 import subprocess
 import pathlib
-import pprint
-import nipype.interfaces.freesurfer as fs
+import bids
 from typing import Union
-from nipype import Node, Function
+from nipype import Function
 from nipype.interfaces.io import SelectFiles
-from petdeface.workflows.mideface import Mideface
-from petdeface.workflows.utils.pet import create_weighted_average_pet
+
+# some day I'll figure out how to make packing work across dev and install environments
+try:
+    from mideface import Mideface
+    from pet import create_weighted_average_pet
+except ModuleNotFoundError:
+    from .mideface import Mideface
+    from .pet import create_weighted_average_pet
+
 from nipype.interfaces.freesurfer import MRICoreg
 from nipype.interfaces.utility import IdentityInterface
 from niworkflows.utils.misc import check_valid_fs_license
-from nipype.pipeline import Node, MapNode, Workflow
-from nipype.interfaces.io import DataSink
-from bids import BIDSLayout
+from nipype.pipeline import Node, Workflow
 
+# collect version from pyproject.toml
+places_to_look = [pathlib.Path(__file__).parent.absolute(), pathlib.Path(__file__).parent.parent.absolute()]
 
-__version__ = pathlib.Path(__file__).parent.parent.joinpath('version').read_text().strip()
+__version__ = "unable to locate version number in pyproject.toml"
+
+# search for toml file
+for place in places_to_look:
+    for root, folders, files in os.walk(place):
+        for file in files:
+            if file.endswith("pyproject.toml"):
+                toml_file = os.path.join(root, file)
+
+                with open(toml_file, "r") as f:
+                    for line in f.readlines():
+                        if "version" in line and len(line.split("=")) > 1:
+                            __version__ = line.split("=")[1].strip().replace('"', "")
+                break
+
 
 
 def locate_freesurfer_license():
@@ -103,9 +120,9 @@ def deface(args: Union[dict, argparse.Namespace]):
 
     if os.path.exists(args.bids_dir):
         if not args.skip_bids_validator:
-            layout = BIDSLayout(args.bids_dir, validate=True)
+            layout = bids.BIDSLayout(args.bids_dir, validate=True)
         else:
-            layout = BIDSLayout(args.bids_dir, validate=False)
+            layout = bids.BIDSLayout(args.bids_dir, validate=False)
     else:
         raise Exception('BIDS directory does not exist')
 
@@ -208,7 +225,10 @@ def deface(args: Union[dict, argparse.Namespace]):
 
 def create_apply_str(t1w_defaced, pet_file, facemask, lta_file, bids_dir):
     """Create string to be used for the --apply flag for defacing PET using mideface."""
-    layout = BIDSLayout(bids_dir)
+    import bids
+    import pathlib
+    import shutil
+    layout = bids.BIDSLayout(bids_dir)
     entities = layout.parse_file_entities(pet_file)
 
     subject = entities['subject']
@@ -265,7 +285,7 @@ class PetDeface:
 
 
     def collect_anat(self):
-        layout = BIDSLayout(self.bids_dir)
+        layout = bids.BIDSLayout(self.bids_dir)
         for subject in self.subjects:
             anat_files = layout.get(subject=subject,
                                     extension=[".nii", ".nii.gz"],
@@ -273,7 +293,7 @@ class PetDeface:
             self.subjects[subject]['anat'] = anat_files
 
     def collect_pet(self):
-        layout = BIDSLayout(self.bids_dir)
+        layout = bids.BIDSLayout(self.bids_dir)
         for subject in self.subjects:
             pet_files = layout.get(subject=subject,
                                    extension=[".nii", ".nii.gz"],
@@ -281,7 +301,7 @@ class PetDeface:
             self.subjects[subject]['pet'] = pet_files
 
     def collect_subjects(self):
-        layout = BIDSLayout(self.bids_dir)
+        layout = bids.BIDSLayout(self.bids_dir)
         subjects = layout.get_subjects()
         return subjects
 
@@ -319,7 +339,7 @@ def cli():
     return arguments
 
 
-if __name__ == "__main__":
+def main():
     # determine present working directory
     pwd = pathlib.Path.cwd()
 
@@ -387,12 +407,16 @@ if __name__ == "__main__":
         docker_command += f"--platform linux/amd64 "
 
         docker_command += f"petdeface:latest " \
-                          f"python3 /project/petdeface/run.py {args_string}"
+                          f"python3 /petdeface/petdeface/run.py {args_string}"
 
         print("Running docker command: \n{}".format(docker_command))
 
         subprocess.run(docker_command, shell=True)
 
     else:
-        petdeface = PetDeface(args.input_dir, args.output_dir, args.anat_only, args.subject, args.session)
+        petdeface = PetDeface(args.input_dir, args.output_dir, args.anat_only, args.subject, args.session, args.n_procs)
         petdeface.run()
+
+
+if __name__ == "__main__":
+    main()
