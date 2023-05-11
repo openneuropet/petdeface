@@ -40,7 +40,6 @@ for place in places_to_look:
                 break
 
 
-
 def locate_freesurfer_license():
     # collect freesurfer home environment variable
     fs_home = pathlib.Path(os.environ.get("FREESURFER_HOME", ""))
