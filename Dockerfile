@@ -37,7 +37,7 @@ RUN curl -sL https://surfer.nmr.mgh.harvard.edu/pub/dist/freesurfer/7.3.2/freesu
 RUN pip3 install numpy nibabel pybids bids-validator
 
 # Clone and install petprep_hmc from GitHub
-RUN git clone https://github.com/bendhouseart/petdeface.git /opt/petdeface
+RUN git clone -b before_big_refactor https://github.com/bendhouseart/petdeface.git /opt/petdeface
 RUN pip3 install --no-cache-dir -e /opt/petdeface
 
 # BIDS App entry point
