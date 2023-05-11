@@ -1,4 +1,5 @@
 import os
+from bids import BIDSLayout
 from nipype.interfaces.base import (
     TraitedSpec,
     CommandLineInputSpec,
