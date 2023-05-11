@@ -34,7 +34,7 @@ RUN curl -sL https://surfer.nmr.mgh.harvard.edu/pub/dist/freesurfer/7.3.2/freesu
     echo ". /opt/freesurfer/SetUpFreeSurfer.sh" >> ~/.bashrc
 
 # Install BIDS application and its dependencies
-RUN pip3 install numpy nibabel pybids bids-validator
+RUN pip3 install numpy nibabel pybids bids-validator nipype niworkflows
 
 # Clone and install petprep_hmc from GitHub
 RUN git clone -b before_big_refactor https://github.com/bendhouseart/petdeface.git /opt/petdeface
