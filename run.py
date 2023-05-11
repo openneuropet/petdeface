@@ -28,9 +28,6 @@ def main(args):
     if check_valid_fs_license() is not True:
         raise Exception('You need a valid FreeSurfer license to proceed!')
     
-    if check_fsl_installed() is not True:
-        raise Exception('FSL is not installed or sourced')
-    
     # Get all PET files
     if args.participant_label is None:
         args.participant_label = layout.get(suffix='pet', target='subject', return_type='id')
@@ -153,16 +150,6 @@ def create_apply_str(t1w_defaced, pet_file, facemask, lta_file, bids_dir):
     apply_str = f"{pet_file} {facemask} {lta_file} {out_file}"
 
     return apply_str
-
-def check_fsl_installed():
-    try:
-        fsl_home = os.environ['FSLDIR']
-        if fsl_home:
-            print("FSL is installed at:", fsl_home)
-            return True
-    except KeyError:
-        print("FSL is not installed or FSLDIR environment variable is not set.")
-        return False
 
 
 if __name__ == '__main__': 
