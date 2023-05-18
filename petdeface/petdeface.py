@@ -390,11 +390,12 @@ def main():
         # remove --input_dir from args_string
         args_string = args_string.replace("--input_dir", "")
 
-        docker_command = f"docker run --rm " \
+        # invoke docker run command to run petdeface in container, while redirecting stdout and stderr to terminal
+        docker_command = f"docker run -a stderr -a stdout --rm " \
                          f"-v {input_mount_point}:{args.input_dir} " \
                          f"-v {output_mount_point}:{args.output_dir} "
         if code_dir:
-            docker_command += f"-v {code_dir}:/project/petdeface "
+            docker_command += f"-v {code_dir}:/petdeface "
 
         # collect location of freesurfer license if it's installed and working
         if check_valid_fs_license():
@@ -406,7 +407,7 @@ def main():
         docker_command += f"--platform linux/amd64 "
 
         docker_command += f"petdeface:latest " \
-                          f"python3 /petdeface/petdeface/run.py {args_string}"
+                          f"python3 /petdeface/petdeface.py {args_string}"
 
         print("Running docker command: \n{}".format(docker_command))
 
