@@ -384,11 +384,20 @@ def main():
                 args_dict[key] = str(value)
 
         args_dict.pop("docker")
+        
+        # remove False boolean keys and values, and set true boolean keys to empty string
+        args_dict = {key: value for key, value in args_dict.items() if value != False}
+        set_to_empty_str = [key for key, value in args_dict.items() if value == True]
+        for key in set_to_empty_str:
+            args_dict[key] = "empty_str"
 
         args_string = " ".join(["--{} {}".format(key, value) for key, value in args_dict.items() if value])
+        args_string = args_string.replace("empty_str", "")
 
-        # remove --input_dir from args_string
+        # remove --input_dir from args_string as input dir is positional, we
+        # we're simply removing an artifact of argparse
         args_string = args_string.replace("--input_dir", "")
+
 
         # invoke docker run command to run petdeface in container, while redirecting stdout and stderr to terminal
         docker_command = f"docker run -a stderr -a stdout --rm " \
@@ -407,7 +416,8 @@ def main():
         docker_command += f"--platform linux/amd64 "
 
         docker_command += f"petdeface:latest " \
-                          f"python3 /petdeface/petdeface.py {args_string}"
+                          f"{args_string}"
+                          #f"python3 /petdeface/petdeface.py {args_string}"
 
         print("Running docker command: \n{}".format(docker_command))
 

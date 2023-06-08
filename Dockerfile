@@ -71,4 +71,4 @@ RUN pip3 install -r  /petdeface/requirements.txt
 COPY . /petdeface
 
 # set the entrypoint to the main executable petdeface.py
-ENTRYPOINT ["python3", "/petdeface/petdeface/petdeface.py", "/input", "--output_dir","/output"]
+ENTRYPOINT ["python3", "/petdeface/petdeface/petdeface.py"]
