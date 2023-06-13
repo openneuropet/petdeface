@@ -1,6 +1,7 @@
 import argparse
 import shutil
 import os
+import json
 import subprocess
 import pathlib
 import bids
@@ -119,7 +120,7 @@ def deface(args: Union[dict, argparse.Namespace]):
 
     if os.path.exists(args.bids_dir):
         if not args.skip_bids_validator:
-            layout = bids.BIDSLayout(args.bids_dir, validate=True)
+            layout =bids.BIDSLayout(args.bids_dir, validate=True)
         else:
             layout = bids.BIDSLayout(args.bids_dir, validate=False)
     else:
@@ -132,14 +133,16 @@ def deface(args: Union[dict, argparse.Namespace]):
     if args.participant_label is None:
         args.participant_label = layout.get(suffix='pet', target='subject', return_type='id')
 
+
     # create output derivatives directory
     if not os.path.exists(args.output_dir):
         os.makedirs(args.output_dir)
 
+    # TODO remove; this doesn't appear to get used anywher 
     # create output directory for this pipeline
-    pipeline_dir = os.path.join(args.output_dir, 'petdeface')
-    if not os.path.exists(pipeline_dir):
-        os.makedirs(pipeline_dir)
+    #pipeline_dir = os.path.join(args.output_dir, 'petdeface')
+    #if not os.path.exists(pipeline_dir):
+    #    os.makedirs(pipeline_dir)
 
     infosource = Node(IdentityInterface(
         fields = ['subject_id','session_id']),
@@ -221,6 +224,71 @@ def deface(args: Union[dict, argparse.Namespace]):
     # remove temp outputs
     shutil.rmtree(os.path.join(args.bids_dir, 'deface_pet_workflow'))
 
+    # collect name of dataset from input folder
+    try:
+        with open(os.path.join(args.bids_dir, 'dataset_description.json')) as f:
+            source_dataset_description = json.load(f)
+    except FileNotFoundError:
+        source_dataset_description = {"Name": "Unknown"}
+
+    # write out dataset_description.json file at the very end
+    with open(os.path.join(args.output_dir, 'dataset_description.json', 'w')) as f:
+        dataset_description = {
+            "Name": f"PET Defaced Version of {source_dataset_description['Name']}",
+            "BIDSVersion": "1.4.0",
+            "GeneratedBy": [{"Name": "PET Deface", "Version": __version__}],
+        }
+
+        json.dump(dataset_description, f, indent=4)
+
+def wrap_up_defacing(path_to_dataset, output_dir=None, placement="adjacent"):
+    """
+    This function maps the output of this pipeline to the original dataset and depending on the 
+    flag/arg for placement either replaces the defaced images in the same directory as the original images,
+    or creates a copy of the original dataset at {path_to_dataset}_defaced and places the defaced images there
+    along with the defacing masks and registration files at the copied dir in the deriviatives folder, or lastly
+    leaves things well enough alone and just places the defaced images in the derivatives folder (does nothing).
+
+    Parameters
+    ----------
+    path_to_dataset : path like object (str or pathlib.Path)
+        Path to original dataset
+    output_dir : path like object (str or pathib.Path), optional
+        Specific directory to place output, this seems redundant given placemnent, by default None
+    placement : str, optional
+        Can be one of three values
+        - adjacent creates (but doesn't overrwrite) a new dataset with only defaced images
+        - inplace replaces original images with defaced versions (not recommended)
+        - derivatives does nothing, defaced images exist only within the derivitives/petdeface dir
+        by default "adjacent"
+    """
+    # get bids layout of dataset
+    layout = bids.BIDSLayout(path_to_dataset, derivatives=True)
+    
+    # collect defaced images
+    defacing_files = layout.get(desc='defaced')
+
+    # collect all original images and jsons
+    raw_only = layout.get(suffix=['pet', 'T1w'])
+
+    # create dictionary of original images and defaced images
+    mapping_dict = {}
+    for defaced in defacing_files:
+        for raw in raw_only:
+            if defaced.entities['subject'] == raw.entities['subject'] and defaced.entities['session'] == raw.entities['session']:
+                mapping_dict[raw] = defaced
+
+    if placement == "adjacent":
+        if output_dir is None:
+            final_destination = f"{path_to_dataset}_defaced"
+        else:
+            final_destination = output_dir
+    elif placement == "inplace":
+        final_destination = path_to_dataset
+    elif placement == "derivatives":
+        finally_destination = None
+    else:
+        raise ValueError("placement must be one of ['adjacent', 'inplace', 'derivatives']")
 
 def create_apply_str(t1w_defaced, pet_file, facemask, lta_file, bids_dir):
     """Create string to be used for the --apply flag for defacing PET using mideface."""
@@ -265,6 +333,7 @@ class PetDeface:
         self.session = session
         self.n_procs = n_procs
         self.skip_bids_validator = skip_bids_validator
+        self.layout = bids.BIDSLayout(self.bids_dir)
 
         # check if freesurfer license is valid
         self.fs_license = check_valid_fs_license()
@@ -284,7 +353,8 @@ class PetDeface:
 
 
     def collect_anat(self):
-        layout = bids.BIDSLayout(self.bids_dir)
+        layout = self.layout
+        #layout = bids.BIDSLayout(self.bids_dir)
         for subject in self.subjects:
             anat_files = layout.get(subject=subject,
                                     extension=[".nii", ".nii.gz"],
@@ -292,7 +362,8 @@ class PetDeface:
             self.subjects[subject]['anat'] = anat_files
 
     def collect_pet(self):
-        layout = bids.BIDSLayout(self.bids_dir)
+        layout = self.layout
+        #layout = bids.BIDSLayout(self.bids_dir)
         for subject in self.subjects:
             pet_files = layout.get(subject=subject,
                                    extension=[".nii", ".nii.gz"],
@@ -300,7 +371,8 @@ class PetDeface:
             self.subjects[subject]['pet'] = pet_files
 
     def collect_subjects(self):
-        layout = bids.BIDSLayout(self.bids_dir)
+        layout = self.layout
+        #layout = bids.BIDSLayout(self.bids_dir)
         subjects = layout.get_subjects()
         return subjects
 
@@ -314,6 +386,100 @@ class PetDeface:
                 "skip_bids_validator": self.skip_bids_validator,
                 "participant_label": None,  # this should be updated to subject?
                })
+
+
+def wrap_up_defacing(path_to_dataset, output_dir=None, placement="adjacent", remove_existing=True):
+    """
+    This function maps the output of this pipeline to the original dataset and depending on the
+    flag/arg for placement either replaces the defaced images in the same directory as the original images,
+    creates a copy of the original dataset at {path_to_dataset}_defaced and places the defaced images there
+    along with the defacing masks and registration files at the copied dir in the deriviatives folder, or lastly
+    leaves things well enough alone and just places the defaced images in the derivatives folder (does nothing).
+
+    Parameters
+    ----------
+    path_to_dataset : path like object (str or pathlib.Path)
+        Path to original dataset
+    output_dir : path like object (str or pathib.Path), optional
+        Specific directory to place output, this seems redundant given placemnent, by default None
+    placement : str, optional
+        Can be one of three values
+        - adjacent creates (but doesn't overrwrite) a new dataset with only defaced images
+        - inplace replaces original images with defaced versions (not recommended)
+        - derivatives does nothing, defaced images exist only within the derivitives/petdeface dir
+        by default "adjacent"
+    """
+    # get bids layout of dataset
+    layout = bids.BIDSLayout(path_to_dataset, derivatives=True)
+
+    # collect defaced images
+    defacing_files = layout.get(desc='defaced')
+
+    # collect all original images and jsons
+    raw_only = bids.BIDSLayout(path_to_dataset, derivatives=False)
+    raw_images_only = raw_only.get(suffix=['pet', 'T1w'])
+
+    # if output_dir is not None and is not the same as the input dir we want to clear it out
+    if output_dir is not None and output_dir != path_to_dataset and remove_existing:
+        if os.path.exists(output_dir):
+            shutil.rmtree(output_dir)
+        pathlib.Path(output_dir).mkdir(parents=True, exist_ok=True, mode=0o775)
+
+    # create dictionary of original images and defaced images
+    mapping_dict = {}
+    for defaced in defacing_files:
+        for raw in raw_images_only:
+            if defaced.entities['subject'] == raw.entities['subject'] and defaced.entities['session'] == raw.entities[
+                'session'] and raw.extension == defaced.extension:
+                mapping_dict[defaced] = raw
+
+    if placement == "adjacent":
+        if output_dir is None:
+            final_destination = f"{path_to_dataset}_defaced"
+        else:
+            final_destination = output_dir
+
+        # copy original dataset to new location
+        for entry in raw_only.files:
+            copy_path = entry.replace(path_to_dataset, final_destination)
+            pathlib.Path(copy_path).parent.mkdir(parents=True, exist_ok=True, mode=0o775)
+            shutil.copy(entry, copy_path)
+
+        # update paths in mapping dict
+        for defaced, raw in mapping_dict.items():
+            # get common path and replace with final_destination to get new path
+            common_path = os.path.commonpath([defaced.path, raw.path])
+            new_path = pathlib.Path(defaced.path.replace(common_path, final_destination).replace('desc-defaced_', ''))
+            # replace derivative and pet deface parts of path
+            new_path = pathlib.Path(
+                *([part for part in new_path.parts if part != 'derivatives' and part != 'petdeface']))
+            mapping_dict[defaced] = new_path
+
+        # copy defaced images to new location
+        for defaced, raw in mapping_dict.items():
+            # it should be noted that the defacing pipeline creates a copy of the t1w image and json in an anat folder
+            # for every session. This isn't always desirable.
+            if pathlib.Path(raw).exists() and pathlib.Path(defaced).exists():
+                shutil.copy(defaced.path, raw)
+
+        # we also want to carry over the defacing masks and registration files
+        masks_and_reg = layout.get(extension=['mgz', 'lta'])
+        derivatives_source_and_dest = {}
+        for file in masks_and_reg:
+            source_path = pathlib.Path(file.path)
+            dest_path = pathlib.Path(file.path.replace(path_to_dataset, final_destination))
+            if dest_path.parent.exists() is False:
+                dest_path.parent.mkdir(parents=True, exist_ok=True, mode=0o775)
+            shutil.copy(file.path, file.path.replace(path_to_dataset, final_destination))
+
+    elif placement == "inplace":
+        final_destination = path_to_dataset
+    elif placement == "derivatives":
+        finally_destination = None
+    else:
+        raise ValueError("placement must be one of ['adjacent', 'inplace', 'derivatives']")
+
+    print(f"completed copying dataset to {final_destination}")
 
 
 def cli():
@@ -426,6 +592,7 @@ def main():
     else:
         petdeface = PetDeface(args.input_dir, args.output_dir, args.anat_only, args.subject, args.session, args.n_procs)
         petdeface.run()
+
 
 
 if __name__ == "__main__":
