@@ -23,3 +23,5 @@ dist/
 debugging/
 nipype.cfg
 scratch.txt
+scratch/
+# ignore scratch folder

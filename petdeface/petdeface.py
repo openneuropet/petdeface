@@ -11,7 +11,7 @@ from typing import Union
 from nipype import Function
 from nipype.interfaces.io import SelectFiles
 
-# some day I'll figure out how to make packing work across dev and install environments
+# some day someone will figure out how to make packing work across dev and install environments
 try:
     from mideface import Mideface
     from pet import create_weighted_average_pet
