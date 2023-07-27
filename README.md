@@ -2,10 +2,10 @@
 A nipype implementation of an anatomical MR and PET defacing pipeline for BIDS datasets. This is a working prototype,
 in active development denoted by the 0.x.x version number. However, it is functional and can be used to deface PET and
 MR data as well as co-register the two modalities. Use is encouraged and feedback via Github issues or email to 
-openneuropet@gmail.com is more than welcome. As is often the case this medical research software is constrained 
+openneuropet@gmail.com is more than welcome. As is often the case, this medical research software is constrained 
 to testing on data that its developers have access to.
 
-This software can be installed via source or via pip from PyPi.
+This software can be installed via source or via pip from PyPi with `pip install petdeface` 
 
 ## Requirements
 
@@ -78,7 +78,13 @@ pip install petdeface-<X.X.X>-py3-none-any.whl # where X.X.X is the version numb
 
 1. Dale A, Fischl B, Sereno MI. Cortical Surface-Based Analysis: I. Segmentation and Surface Reconstruction. 
    Neuroimage. 1999;9(2):179–94. doi:10.1006/nimg.1998.0395.
-2. Gorgolewski, Krzysztof J. ; Esteban, Oscar ; Burns, Christopher ; Ziegler, Erik ; Pinsard, Basile ; Madison, Cindee ; 
+2. Fischl B. FreeSurfer. Neuroimage. 2012 Aug 15;62(2):774-81. doi: 10.1016/j.neuroimage.2012.01.021.
+   Epub 2012 Jan 10. PMID: 22248573; PMCID: PMC3685476.
+3. Stefano Cerri, Douglas N. Greve, Andrew Hoopes, Henrik Lundell, Hartwig R. Siebner, Mark Mühlau, Koen Van Leemput,
+   An open-source tool for longitudinal whole-brain and white matter lesion segmentation,
+   NeuroImage: Clinical, Volume 38, 2023, 103354, ISSN 2213-1582, https://doi.org/10.1016/j.nicl.2023.103354.
+   (https://www.sciencedirect.com/science/article/pii/S2213158223000438)
+4. Gorgolewski, Krzysztof J. ; Esteban, Oscar ; Burns, Christopher ; Ziegler, Erik ; Pinsard, Basile ; Madison, Cindee ; 
    Waskom, Michael ; Ellis, David Gage ; Clark, Dav ; Dayan, Michael ; Manhães-Savio, Alexandre ; 
    Notter, Michael Philipp ; Johnson, Hans ; Dewey, Blake E ; Halchenko, Yaroslav O. ; Hamalainen, Carlo ; 
    Keshavan, Anisha ; Clark, Daniel ; Huntenburg, Julia M. ; Hanke, Michael ; Nichols, B. Nolan ; Wassermann , Demian ;
@@ -91,4 +97,3 @@ pip install petdeface-<X.X.X>-py3-none-any.whl # where X.X.X is the version numb
    Cooper, Gavin ; Floren, Andrew ; Huang, Lijie ; Gonzalez, Ivan ; McNamee, Daniel ; Papadopoulos Orfanos, Dimitri ; 
    Pellman, John ; Triplett, William ; Ghosh, Satrajit (2016). Nipype: a flexible, lightweight and extensible 
    neuroimaging data processing framework in Python. 0.12.0-rc1. Zenodo. 10.5281/zenodo.50186
-
