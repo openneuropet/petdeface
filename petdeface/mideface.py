@@ -138,7 +138,7 @@ class MidefaceInputSpec(CommandLineInputSpec):
         argstr="--display %d",
     )
     apply = traits.Str(
-        desc="Apply midface output to a second volume",
+        desc="Apply mideface output to a second volume",
         argstr="--apply %s",
     )
     check = traits.Tuple(
