@@ -27,14 +27,10 @@ def create_weighted_average_pet(pet_file: str, bids_dir: str) -> str:
     frames_start = np.array(meta.outputs.out_dict["FrameTimesStart"])
     frames_duration = np.array(meta.outputs.out_dict["FrameDuration"])
 
-    frames = range(data.shape[-1])
-
     new_pth = os.getcwd()
 
     mid_frames = frames_start + frames_duration / 2
-    wavg = np.trapz(data[..., frames], dx=np.diff(mid_frames[frames]), axis=3) / np.sum(
-        mid_frames
-    )
+    wavg = np.trapz(data, x=mid_frames) / (mid_frames[-1] - mid_frames[0])
 
     out_name = Path(pet_file.replace("_pet.", "_desc-wavg_pet.")).name
     out_file = os.path.join(new_pth, out_name)
