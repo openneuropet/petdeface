@@ -1,13 +1,12 @@
 import os
-from bids import BIDSLayout
-from nipype.interfaces.base import (
-    TraitedSpec,
-    CommandLineInputSpec,
-    CommandLine,
-    File,
-    Directory,
-    traits,
-)
+
+from nipype.interfaces.base import CommandLine
+from nipype.interfaces.base import CommandLineInputSpec
+from nipype.interfaces.base import Directory
+from nipype.interfaces.base import File
+from nipype.interfaces.base import TraitedSpec
+from nipype.interfaces.base import traits
+
 
 class MidefaceInputSpec(CommandLineInputSpec):
     in_file = File(
@@ -62,7 +61,8 @@ class MidefaceInputSpec(CommandLineInputSpec):
         argstr="--xmask-synthseg %d",
     )
     fill_const = traits.Tuple(
-        traits.Float, traits.Float,
+        traits.Float,
+        traits.Float,
         desc="Fill constants",
         argstr="--fill-const %f %f",
     )
@@ -142,14 +142,17 @@ class MidefaceInputSpec(CommandLineInputSpec):
         argstr="--apply %s",
     )
     check = traits.Tuple(
-        File, File,
+        File,
+        File,
         desc="Check whether a volume has been defaced",
         argstr="--check %s %s",
     )
 
+
 class MidefaceOutputSpec(TraitedSpec):
     out_file = File(desc="Defaced input")
     out_facemask = File(desc="Facemask")
+
 
 class Mideface(CommandLine):
     _cmd = "mideface"
@@ -161,4 +164,3 @@ class Mideface(CommandLine):
         outputs["out_file"] = os.path.abspath(self.inputs.out_file)
         outputs["out_facemask"] = os.path.abspath(self.inputs.out_facemask)
         return outputs
-   
