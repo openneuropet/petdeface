@@ -1,5 +1,4 @@
 import argparse
-import gzip
 import json
 import os
 import pathlib
@@ -10,22 +9,16 @@ from typing import Union
 
 import bids
 from nipype import Function
-from nipype.interfaces.io import SelectFiles
-
-
-# some day someone will figure out how to make packing work across dev and install environments
-try:
-    from mideface import Mideface
-    from pet import create_weighted_average_pet
-except ModuleNotFoundError:
-    from .mideface import Mideface
-    from .pet import create_weighted_average_pet
-
 from nipype.interfaces.freesurfer import MRICoreg
 from nipype.interfaces.utility import IdentityInterface
 from nipype.pipeline import Node
 from nipype.pipeline import Workflow
+from niworkflows.utils.bids import collect_data
+from niworkflows.utils.bids import collect_participants
 from niworkflows.utils.misc import check_valid_fs_license
+
+from .mideface import Mideface
+from .pet import create_weighted_average_pet
 
 
 # collect version from pyproject.toml
@@ -156,66 +149,55 @@ def deface(args: Union[dict, argparse.Namespace]):
     else:
         args = args
 
-    if os.path.exists(args.bids_dir):
-        # it gets really annoying when there are both gzipped and unzipped nifti files, we are going to
-        # zip them all up before we get started
-        layout = bids.BIDSLayout(args.bids_dir, validate=False)
-        for file in layout.get(extension="nii", return_type="file"):
-            zip_nifti(file)
-
-        if not args.skip_bids_validator:
-            layout = bids.BIDSLayout(args.bids_dir, validate=True)
-        else:
-            layout = bids.BIDSLayout(args.bids_dir, validate=False)
-    else:
-        raise Exception("BIDS directory does not exist")
-
-    if check_valid_fs_license() is not True:
+    if not check_valid_fs_license():
         raise Exception("You need a valid FreeSurfer license to proceed!")
 
-    # Get all PET files
-    if args.participant_label is None:
-        args.participant_label = layout.get(
-            suffix="pet", target="subject", return_type="id"
-        )
+    participants = args.participant_label or collect_participants(
+        args.bids_dir, bids_validate=~args.skip_bids_validator
+    )
+
+    bidsdata, layout = collect_data(
+        args.bids_dir,
+        participant_label=participants,
+        bids_validate=~args.skip_bids_validator,
+        bids_filters={
+            "fmap": {"datatype": "pet", "suffix": "pet"}
+        },  # this is a hack as the queries coded in collect_data don't include pet
+    )
+    # rename fmap to pet
+    bidsdata["pet"] = bidsdata.pop(
+        "fmap"
+    )  # better solution would be to add this properly in niworkflows collect_data queries
+
+    # Check that PET and T1w files are matched
+    match_error = "Make sure that each PET has a corresponding T1w in the same session."
+    if len(bidsdata["pet"]) == len(bidsdata["t1w"]):
+        for pet, t1w in zip(bidsdata["pet"], bidsdata["t1w"]):
+            if (
+                os.path.basename(pet).split("_pet")[0]
+                != os.path.basename(t1w).split("_T1w")[0]
+            ):
+                raise ValueError(match_error)
+    else:
+        raise ValueError(match_error)
 
     # create output derivatives directory
     if not os.path.exists(args.output_dir):
         os.makedirs(args.output_dir)
 
     infosource = Node(
-        IdentityInterface(fields=["subject_id", "session_id"]), name="infosource"
+        IdentityInterface(fields=["pet_file", "t1w_file"]), name="infosource"
     )
-
-    sessions = layout.get_sessions()
-    if sessions:
-        infosource.iterables = [
-            ("subject_id", args.participant_label),
-            ("session_id", sessions),
-        ]
-    else:
-        infosource.iterables = [("subject_id", args.participant_label)]
-
-    templates = {
-        "t1w_file": "sub-{subject_id}/anat/*_T1w.[n]*"
-        if not sessions
-        else "sub-{subject_id}/*/anat/*_T1w.[n]*",
-        "pet_file": "sub-{subject_id}/pet/*_pet.[n]*"
-        if not sessions
-        else "sub-{subject_id}/ses-{session_id}/pet/*_pet.[n]*",
-        "json_file": "sub-{subject_id}/pet/*_pet.json"
-        if not sessions
-        else "sub-{subject_id}/ses-{session_id}/pet/*_pet.json",
-    }
-
-    selectfiles = Node(
-        SelectFiles(templates, base_directory=args.bids_dir), name="select_files"
-    )
+    infosource.iterables = [
+        ("pet_file", bidsdata["pet"]),
+        ("t1w_file", bidsdata["t1w"]),
+    ]
+    infosource.synchronize = True
 
     substitutions = [("_subject_id", "sub"), ("_session_id_", "ses")]
     subjFolders = (
         [("sub-%s" % (sub), "sub-%s" % (sub)) for sub in layout.get_subjects()]
-        if not sessions
+        if not layout.get_sessions()
         else [
             ("sub-%s_ses-%s" % (sub, ses), "sub-%s/ses-%s" % (sub, ses))
             for ses in layout.get_sessions()
@@ -274,14 +256,9 @@ def deface(args: Union[dict, argparse.Namespace]):
     workflow.config["execution"]["remove_unnecessary_outputs"] = "false"
     workflow.connect(
         [
-            (
-                infosource,
-                selectfiles,
-                [("subject_id", "subject_id"), ("session_id", "session_id")],
-            ),
-            (selectfiles, deface_t1w, [("t1w_file", "in_file")]),
-            (selectfiles, create_time_weighted_average, [("pet_file", "pet_file")]),
-            (selectfiles, coreg_pet_to_t1w, [("t1w_file", "reference_file")]),
+            (infosource, deface_t1w, [("t1w_file", "in_file")]),
+            (infosource, create_time_weighted_average, [("pet_file", "pet_file")]),
+            (infosource, coreg_pet_to_t1w, [("t1w_file", "reference_file")]),
             (
                 create_time_weighted_average,
                 coreg_pet_to_t1w,
@@ -289,7 +266,7 @@ def deface(args: Union[dict, argparse.Namespace]):
             ),
             (deface_t1w, create_apply_str_node, [("out_facemask", "facemask")]),
             (coreg_pet_to_t1w, create_apply_str_node, [("out_lta_file", "lta_file")]),
-            (selectfiles, create_apply_str_node, [("pet_file", "pet_file")]),
+            (infosource, create_apply_str_node, [("pet_file", "pet_file")]),
             (deface_t1w, create_apply_str_node, [("out_file", "t1w_defaced")]),
             (create_apply_str_node, deface_pet, [("apply_str", "apply")]),
         ]
@@ -299,18 +276,6 @@ def deface(args: Union[dict, argparse.Namespace]):
 
     # remove temp outputs
     shutil.rmtree(os.path.join(args.bids_dir, "deface_pet_workflow"))
-
-
-def zip_nifti(nifti_file):
-    """Zips an un-gzipped nifti file and removes the original file."""
-    if str(nifti_file).endswith(".gz"):
-        return nifti_file
-    else:
-        with open(nifti_file, "rb") as infile:
-            with gzip.open(nifti_file + ".gz", "wb") as outfile:
-                shutil.copyfileobj(infile, outfile)
-        os.remove(nifti_file)
-        return nifti_file + ".gz"
 
 
 def write_out_dataset_description_json(input_bids_dir, output_bids_dir=None):
@@ -405,53 +370,11 @@ class PetDeface:
         self.session = session
         self.n_procs = n_procs
         self.skip_bids_validator = skip_bids_validator
-        self.layout = bids.BIDSLayout(self.bids_dir)
 
         # check if freesurfer license is valid
         self.fs_license = check_valid_fs_license()
         if not self.fs_license:
             raise ValueError("Freesurfer license is not valid")
-
-        # create map of subjects in bids_dir
-        self.subjects = {}
-        for s in self.collect_subjects():
-            self.subjects[s] = {"anat": [], "pet": []}
-
-        # collect pet and anat files
-        self.collect_anat()
-        self.collect_pet()
-
-        # run pipeline
-
-    def collect_anat(self):
-        layout = self.layout
-        # layout = bids.BIDSLayout(self.bids_dir)
-        for subject in self.subjects:
-            anat_files = layout.get(
-                subject=subject,
-                extension=[".nii", ".nii.gz"],
-                suffix="T1w",
-                return_type="file",
-            )
-            self.subjects[subject]["anat"] = anat_files
-
-    def collect_pet(self):
-        layout = self.layout
-        # layout = bids.BIDSLayout(self.bids_dir)
-        for subject in self.subjects:
-            pet_files = layout.get(
-                subject=subject,
-                extension=[".nii", ".nii.gz"],
-                suffix="pet",
-                return_type="file",
-            )
-            self.subjects[subject]["pet"] = pet_files
-
-    def collect_subjects(self):
-        layout = self.layout
-        # layout = bids.BIDSLayout(self.bids_dir)
-        subjects = layout.get_subjects()
-        return subjects
 
     def run(self):
         deface(
@@ -463,7 +386,7 @@ class PetDeface:
                 "session": self.session,
                 "n_procs": self.n_procs,
                 "skip_bids_validator": self.skip_bids_validator,
-                "participant_label": None,  # this should be updated to subject?
+                "participant_label": self.subject,
                 "placement": self.placement,
                 "remove_existing": self.remove_existing,
             }
