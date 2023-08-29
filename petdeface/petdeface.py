@@ -160,14 +160,7 @@ def deface(args: Union[dict, argparse.Namespace]):
         args.bids_dir,
         participant_label=participants,
         bids_validate=~args.skip_bids_validator,
-        bids_filters={
-            "fmap": {"datatype": "pet", "suffix": "pet"}
-        },  # this is a hack as the queries coded in collect_data don't include pet
     )
-    # rename fmap to pet
-    bidsdata["pet"] = bidsdata.pop(
-        "fmap"
-    )  # better solution would be to add this properly in niworkflows collect_data queries
 
     # Check that PET and T1w files are matched
     match_error = "Make sure that each PET has a corresponding T1w in the same session."

@@ -343,18 +343,21 @@ tests = ["codecov", "pytest", "pytest-cov"]
 
 [[package]]
 name = "filelock"
-version = "3.12.2"
+version = "3.12.3"
 description = "A platform independent file lock."
 optional = false
-python-versions = ">=3.7"
+python-versions = ">=3.8"
 files = [
-    {file = "filelock-3.12.2-py3-none-any.whl", hash = "sha256:cbb791cdea2a72f23da6ac5b5269ab0a0d161e9ef0100e653b69049a7706d1ec"},
-    {file = "filelock-3.12.2.tar.gz", hash = "sha256:002740518d8aa59a26b0c76e10fb8c6e15eae825d34b6fdf670333fd7b938d81"},
+    {file = "filelock-3.12.3-py3-none-any.whl", hash = "sha256:f067e40ccc40f2b48395a80fcbd4728262fab54e232e090a4063ab804179efeb"},
+    {file = "filelock-3.12.3.tar.gz", hash = "sha256:0ecc1dd2ec4672a10c8550a8182f1bd0c0a5088470ecd5a125e45f49472fac3d"},
 ]
 
+[package.dependencies]
+typing-extensions = {version = ">=4.7.1", markers = "python_version < \"3.11\""}
+
 [package.extras]
-docs = ["furo (>=2023.5.20)", "sphinx (>=7.0.1)", "sphinx-autodoc-typehints (>=1.23,!=1.23.4)"]
-testing = ["covdefaults (>=2.3)", "coverage (>=7.2.7)", "diff-cover (>=7.5)", "pytest (>=7.3.1)", "pytest-cov (>=4.1)", "pytest-mock (>=3.10)", "pytest-timeout (>=2.1)"]
+docs = ["furo (>=2023.7.26)", "sphinx (>=7.1.2)", "sphinx-autodoc-typehints (>=1.24)"]
+testing = ["covdefaults (>=2.3)", "coverage (>=7.3)", "diff-cover (>=7.7)", "pytest (>=7.4)", "pytest-cov (>=4.1)", "pytest-mock (>=3.11.1)", "pytest-timeout (>=2.1)"]
 
 [[package]]
 name = "flake8"
@@ -586,13 +589,13 @@ files = [
 
 [[package]]
 name = "imageio"
-version = "2.31.1"
+version = "2.31.2"
 description = "Library for reading and writing a wide range of image, video, scientific, and volumetric data formats."
 optional = false
 python-versions = ">=3.7"
 files = [
-    {file = "imageio-2.31.1-py3-none-any.whl", hash = "sha256:4106fb395ef7f8dc0262d6aa1bb03daba818445c381ca8b7d5dfc7a2089b04df"},
-    {file = "imageio-2.31.1.tar.gz", hash = "sha256:f8436a02af02fd63f272dab50f7d623547a38f0e04a4a73e2b02ae1b8b180f27"},
+    {file = "imageio-2.31.2-py3-none-any.whl", hash = "sha256:a78fbcb33432042a4d6993c87f3ea1f136d908318ce7dda857846ccff73294de"},
+    {file = "imageio-2.31.2.tar.gz", hash = "sha256:ae19221f4a8f118f1c9451e8f5357faeeacdf956198cf374bc8ab00f1ff7d525"},
 ]
 
 [package.dependencies]
@@ -614,6 +617,21 @@ linting = ["black", "flake8"]
 pyav = ["av"]
 test = ["fsspec[github]", "pytest", "pytest-cov"]
 tifffile = ["tifffile"]
+
+[[package]]
+name = "importlib-resources"
+version = "6.0.1"
+description = "Read resources from Python packages"
+optional = false
+python-versions = ">=3.8"
+files = [
+    {file = "importlib_resources-6.0.1-py3-none-any.whl", hash = "sha256:134832a506243891221b88b4ae1213327eea96ceb4e407a00d790bb0626f45cf"},
+    {file = "importlib_resources-6.0.1.tar.gz", hash = "sha256:4359457e42708462b9626a04657c6208ad799ceb41e5c58c57ffa0e6a098a5d4"},
+]
+
+[package.extras]
+docs = ["furo", "jaraco.packaging (>=9.3)", "jaraco.tidelift (>=1.4)", "rst.linker (>=1.9)", "sphinx (>=3.5)", "sphinx-lint"]
+testing = ["pytest (>=6)", "pytest-black (>=0.3.7)", "pytest-checkdocs (>=2.4)", "pytest-cov", "pytest-enabler (>=2.2)", "pytest-mypy (>=0.9.1)", "pytest-ruff"]
 
 [[package]]
 name = "interface-meta"
@@ -1219,17 +1237,16 @@ tests = ["codecov", "pytest", "pytest-cov"]
 
 [[package]]
 name = "niworkflows"
-version = "1.8.1"
+version = "1.9.0.dev28+g6c8159ad"
 description = "NeuroImaging Workflows provides processing tools for magnetic resonance images of the brain."
 optional = false
 python-versions = ">=3.8"
-files = [
-    {file = "niworkflows-1.8.1-py3-none-any.whl", hash = "sha256:14a1668aa06db0a1b56934cf717fb9b58ec9fe3b0bc653a1c6cc84fb21a6fadd"},
-    {file = "niworkflows-1.8.1.tar.gz", hash = "sha256:7e4bbefaf0f06d3f97c509625520ea93d97ebde5070c670eb87aa2c96b9b20b9"},
-]
+files = []
+develop = false
 
 [package.dependencies]
 attrs = "*"
+importlib-resources = {version = ">=5.7", markers = "python_version < \"3.11\""}
 jinja2 = "*"
 looseversion = "*"
 matplotlib = ">=3.4.2"
@@ -1252,11 +1269,17 @@ transforms3d = "*"
 
 [package.extras]
 all = ["niworkflows[doc,pointclouds,style,tests]"]
-doc = ["furo (>=2021.10.09,<2021.11.0)", "pydot (>=1.2.3)", "pydotplus", "sphinx (>=4.0,<5.0)", "sphinxcontrib-apidoc", "sphinxcontrib-napoleon"]
+doc = ["furo", "pydot (>=1.2.3)", "pydotplus", "sphinx", "sphinxcontrib-apidoc", "sphinxcontrib-napoleon"]
 docs = ["niworkflows[doc]"]
 pointclouds = ["pyntcloud"]
 style = ["flake8 (>=3.7.0)"]
 tests = ["coverage (>=5.2.1)", "pytest (>=4.4)", "pytest-cov", "pytest-env", "pytest-xdist (>=1.28)", "pytest-xvfb"]
+
+[package.source]
+type = "git"
+url = "https://github.com/nipreps/niworkflows.git"
+reference = "HEAD"
+resolved_reference = "6c8159adc6aef4f33dae1d259b62f419bfab8545"
 
 [[package]]
 name = "nodeenv"
@@ -2171,13 +2194,13 @@ files = [
 
 [[package]]
 name = "tifffile"
-version = "2023.8.12"
+version = "2023.8.25"
 description = "Read and write TIFF files"
 optional = false
 python-versions = ">=3.9"
 files = [
-    {file = "tifffile-2023.8.12-py3-none-any.whl", hash = "sha256:d1ef06461a947a6800ba6121b330b54a57fb9cbf7e5bc0adab8307081297d66b"},
-    {file = "tifffile-2023.8.12.tar.gz", hash = "sha256:824956b6d974b9d346aae59932bea862a2ad18fcc2b1a820b6941b7f6ddb2bca"},
+    {file = "tifffile-2023.8.25-py3-none-any.whl", hash = "sha256:40318485b59e9acb62e7139f22bd46e6760f92daea562b79900bfce3ee2613b7"},
+    {file = "tifffile-2023.8.25.tar.gz", hash = "sha256:0a3ebcdfe71eb61a487dd22eaf21ed8962c511e6eb692153c7ac15f81798dfa4"},
 ]
 
 [package.dependencies]
@@ -2421,4 +2444,4 @@ files = [
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.10"
-content-hash = "4b874f01cdaee0b6c81cc9ccfeced3b36bf4f5934ffa15e6dd47a45f7417c97e"
+content-hash = "0924988c9b3b509bbc23f8b1f8f58550030d23567f1eb8ec2c5ae1d204a944d8"

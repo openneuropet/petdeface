@@ -8,7 +8,7 @@ readme = "README.md"
 
 [tool.poetry.dependencies]
 python = ">=3.10"
-niworkflows = "^1.8.1"
+niworkflows = { git = "https://github.com/nipreps/niworkflows.git" }
 
 [tool.poetry.group.dev.dependencies]
 black = "^23.7.0"
