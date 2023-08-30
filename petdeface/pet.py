@@ -1,39 +1,59 @@
-def create_weighted_average_pet(pet_file: str, bids_dir: str) -> str:
-    import os
-    from pathlib import Path
+import os
 
-    import nibabel as nib
-    import numpy as np
-    from niworkflows.interfaces.bids import ReadSidecarJSON
+import nibabel as nib
+import numpy as np
+from nipype.interfaces.base import BaseInterface
+from nipype.interfaces.base import BaseInterfaceInputSpec
+from nipype.interfaces.base import File
+from nipype.interfaces.base import TraitedSpec
+from nipype.utils.filemanip import split_filename
+from niworkflows.interfaces.bids import ReadSidecarJSON
 
-    """
-    Create a time-weighted average of dynamic PET data using mid-frames
 
-    Args:
-        pet_file: path to input dynamic PET volume
-        bids_dir: path to BIDS directory containing the PET file
+class WeightedAverageInputSpec(BaseInterfaceInputSpec):
+    pet_file = File(exists=True, desc="Dynamic PET", mandatory=True)
 
-    Returns:
-        path to time-weighted average of dynamic PET
-    """
 
-    img = nib.load(pet_file)
-    data = img.get_fdata()
+class WeightedAverageOutputSpec(TraitedSpec):
+    out_file = File(exists=True, desc="Time-weighted average of dynamic PET")
 
-    meta = ReadSidecarJSON(
-        in_file=pet_file, bids_dir=bids_dir, bids_validate=False
-    ).run()
 
-    frames_start = np.array(meta.outputs.out_dict["FrameTimesStart"])
-    frames_duration = np.array(meta.outputs.out_dict["FrameDuration"])
+class WeightedAverage(BaseInterface):
+    """Create a time-weighted average of dynamic PET data using mid-frames."""
 
-    new_pth = os.getcwd()
+    input_spec = WeightedAverageInputSpec
+    output_spec = WeightedAverageOutputSpec
 
-    mid_frames = frames_start + frames_duration / 2
-    wavg = np.trapz(data, x=mid_frames) / (mid_frames[-1] - mid_frames[0])
+    def _run_interface(self, runtime):
+        pet_file = self.inputs.pet_file
+        bids_dir = os.path.dirname(pet_file)
 
-    out_name = Path(pet_file.replace("_pet.", "_desc-wavg_pet.")).name
-    out_file = os.path.join(new_pth, out_name)
-    nib.save(nib.Nifti1Image(wavg, img.affine), out_file)
+        img = nib.load(pet_file)
+        data = img.get_fdata()
 
-    return out_file
+        meta = ReadSidecarJSON(
+            in_file=pet_file, bids_dir=bids_dir, bids_validate=False
+        ).run()
+
+        frames_start = np.array(meta.outputs.out_dict["FrameTimesStart"])
+        frames_duration = np.array(meta.outputs.out_dict["FrameDuration"])
+
+        mid_frames = frames_start + frames_duration / 2
+        wavg = np.trapz(data, x=mid_frames) / (mid_frames[-1] - mid_frames[0])
+
+        _, base, ext = split_filename(pet_file)
+        out_name = base.replace("_pet", "_desc-wavg_pet")
+        out_file = out_name + ext
+        nib.save(nib.Nifti1Image(wavg, img.affine), out_file)
+
+    def _list_outputs(self):
+        outputs = self._outputs().get()
+        pet_file = self.inputs.pet_file
+        _, base, ext = split_filename(pet_file)
+
+        out_name = base.replace("_pet", "_desc-wavg_pet")
+        out_file = os.path.abspath(out_name + ext)
+
+        outputs["out_file"] = out_file
+
+        return outputs

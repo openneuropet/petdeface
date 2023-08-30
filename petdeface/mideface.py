@@ -1,5 +1,3 @@
-import os
-
 from nipype.interfaces.base import CommandLine
 from nipype.interfaces.base import CommandLineInputSpec
 from nipype.interfaces.base import Directory
@@ -9,21 +7,20 @@ from nipype.interfaces.base import traits
 
 
 class MidefaceInputSpec(CommandLineInputSpec):
-    in_file = File(
-        desc="Volume to deface",
-        exists=True,
-        argstr="--i %s",
-    )
+    in_file = File(desc="Volume to deface", exists=True, argstr="--i %s")
     out_file = File(
         desc="Defaced input",
         argstr="--o %s",
-        name_source=["in_file"],
+        name_source="in_file",
         name_template="%s_defaced",
-        output_name="out_file",
+        keep_extension=True,
     )
     out_facemask = File(
         desc="Facemask",
         argstr="--facemask %s",
+        name_source="in_file",
+        name_template="%s_facemask",
+        keep_extension=True,
     )
     odir = Directory(
         desc="Output directory (turns on PostHeadSurf)",
@@ -137,10 +134,6 @@ class MidefaceInputSpec(CommandLineInputSpec):
         desc="Set Xvfb display number for taking pics",
         argstr="--display %d",
     )
-    apply = traits.Str(
-        desc="Apply mideface output to a second volume",
-        argstr="--apply %s",
-    )
     check = traits.Tuple(
         File,
         File,
@@ -150,8 +143,8 @@ class MidefaceInputSpec(CommandLineInputSpec):
 
 
 class MidefaceOutputSpec(TraitedSpec):
-    out_file = File(desc="Defaced input")
-    out_facemask = File(desc="Facemask")
+    out_file = File(desc="Defaced input", exists=True)
+    out_facemask = File(desc="Facemask", exists=True)
 
 
 class Mideface(CommandLine):
@@ -159,8 +152,41 @@ class Mideface(CommandLine):
     input_spec = MidefaceInputSpec
     output_spec = MidefaceOutputSpec
 
-    def _list_outputs(self):
-        outputs = self.output_spec().get()
-        outputs["out_file"] = os.path.abspath(self.inputs.out_file)
-        outputs["out_facemask"] = os.path.abspath(self.inputs.out_facemask)
-        return outputs
+
+class ApplyMidefaceInputSpec(CommandLineInputSpec):
+    in_file = File(
+        desc="Volume to deface",
+        exists=True,
+        position=1,
+        argstr="%s",
+    )
+    facemask = File(
+        desc="Facemask",
+        exists=True,
+        position=2,
+        argstr="%s",
+    )
+    lta_file = File(
+        desc="Registration matrix lta file",
+        exists=True,
+        position=3,
+        argstr="%s",
+    )
+    out_file = File(
+        desc="Defaced input",
+        position=4,
+        argstr="%s",
+        name_source="in_file",
+        name_template="%s_defaced",
+        keep_extension=True,
+    )
+
+
+class ApplyMidefaceOutputSpec(TraitedSpec):
+    out_file = File(desc="Defaced input", exists=True)
+
+
+class ApplyMideface(CommandLine):
+    _cmd = "mideface --apply"
+    input_spec = ApplyMidefaceInputSpec
+    output_spec = ApplyMidefaceOutputSpec
