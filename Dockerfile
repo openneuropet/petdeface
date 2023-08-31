@@ -40,13 +40,35 @@ SHELL ["/bin/bash", "-ce"]
 RUN mkdir -p /input /output /petdeface
 
 ENV PATH="/root/.local/bin:$PATH"
+# setup fs env
+ENV PATH=/opt/freesurfer/bin:/opt/freesurfer/fsfast/bin:/opt/freesurfer/tktools:/opt/freesurfer/mni/bin:${PATH} \
+    OS=Linux \
+    FREESURFER_HOME=/opt/freesurfer \
+    FREESURFER=/opt/freesurfer \
+    SUBJECTS_DIR=/opt/freesurfer/subjects \
+    LOCAL_DIR=/opt/freesurfer/local \
+    FSFAST_HOME=/opt/freesurfer/fsfast \
+    FMRI_ANALYSIS_DIR=/opt/freesurfer/fsfast \
+    FUNCTIONALS_DIR=/opt/freesurfer/sessions \
+    FS_OVERRIDE=0 \
+    FIX_VERTEX_AREA="" \
+    FSF_OUTPUT_FORMAT=nii.gz \
+    MINC_BIN_DIR=/opt/freesurfer/mni/bin \
+    MINC_LIB_DIR=/opt/freesurfer/mni/lib \
+    MNI_DIR=/opt/freesurfer/mni \
+    MNI_DATAPATH=/opt/freesurfer/mni/data \
+    MNI_PERL5LIB=/opt/freesurfer/mni/share/perl5 \
+    PERL5LIB=/opt/freesurfer/mni/share/perl5
+
+# install dependencies
+RUN pip3 install --upgrade pip
+
+ADD requirements.txt /petdeface/requirements.txt
+
+RUN pip3 install -r  /petdeface/requirements.txt
 
 # copy the project
 COPY . /petdeface
 
-RUN cd /petdeface && \
-    pip3 install -e .
-
-RUN echo ". /opt/freesurfer/SetUpFreeSurfer.sh" >> ~/.bashrc
-
-ENTRYPOINT ["/bin/bash", "-c"]
+# set the entrypoint to the main executable petdeface.py
+ENTRYPOINT ["python3", "/petdeface/petdeface/petdeface.py"]

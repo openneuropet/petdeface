@@ -10,3 +10,18 @@ __pycache__/
 
 # ignore dist
 dist/
+
+# nipype generates pickle files, we need to redirect where it stores them,
+# but until then hack fix
+*.pkl
+*.pklz
+
+*.out
+
+.DS_Store
+.vscode
+debugging/
+nipype.cfg
+scratch.txt
+scratch/
+# ignore scratch folder
