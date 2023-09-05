@@ -23,5 +23,8 @@ dist/
 debugging/
 nipype.cfg
 scratch.txt
-scratch/
 # ignore scratch folder
+scratch/
+
+# integration testing scripts using unpublishable dicoms
+integration_testing.sh

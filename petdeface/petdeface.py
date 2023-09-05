@@ -177,7 +177,10 @@ def deface(args: Union[dict, argparse.Namespace]) -> None:
         single_subject_wf = init_single_subject_wf(subject_id, args.bids_dir)
         petdeface_wf.add_nodes([single_subject_wf])
 
-    petdeface_wf.write_graph("petdeface.dot", graph2use="colored", simple_form=True)
+    try:
+        petdeface_wf.write_graph("petdeface.dot", graph2use="colored", simple_form=True)
+    except OSError as Err:
+        print(f"Raised this error {Err}\nGraphviz may not be installed.")
     petdeface_wf.run(plugin="MultiProc", plugin_args={"n_procs": int(args.n_procs)})
 
     # write out dataset_description.json file to derivatives directory
@@ -437,7 +440,7 @@ def cli():
         action="store_true",
         default=False,
         help="Run in docker container",
-    )
+    ),
     parser.add_argument(
         "--n_procs",
         help="Number of processors to use when running the workflow",
@@ -519,8 +522,8 @@ def main():  # noqa: max-complexity: 12
         args_dict.pop("docker")
 
         # remove False boolean keys and values, and set true boolean keys to empty string
-        args_dict = {key: value for key, value in args_dict.items() if not value}
-        set_to_empty_str = [key for key, value in args_dict.items() if value]
+        args_dict = {key: value for key, value in args_dict.items() if value}
+        set_to_empty_str = [key for key, value in args_dict.items() if value == True]
         for key in set_to_empty_str:
             args_dict[key] = "empty_str"
 
@@ -551,8 +554,7 @@ def main():  # noqa: max-complexity: 12
         # specify platform
         docker_command += "--platform linux/amd64 "
 
-        docker_command += f"petdeface:latest " \
-                          f"python3 /petdeface/petdeface.py {args_string}"
+        docker_command += f"petdeface:latest " f"{args_string}"
 
         print("Running docker command: \n{}".format(docker_command))
 
