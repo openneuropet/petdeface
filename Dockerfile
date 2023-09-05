@@ -1,5 +1,5 @@
 # Use the official Python base image for x86_64
-FROM --platform=linux/x86_64 python:3.9
+FROM --platform=linux/x86_64 python:3.11
 
 # Download QEMU for cross-compilation
 ADD https://github.com/multiarch/qemu-user-static/releases/download/v6.1.0-8/qemu-x86_64-static /usr/bin/qemu-x86_64-static
@@ -28,9 +28,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Install Freesurfer
 ENV FREESURFER_HOME="/opt/freesurfer" \
-    PATH="/opt/freesurfer/bin:$PATH"
+    PATH="/opt/freesurfer/bin:$PATH" \
+    FREESURFER_VERSION=7.4.1
 
-RUN curl -L --progress-bar https://surfer.nmr.mgh.harvard.edu/pub/dist/freesurfer/7.3.2/freesurfer-linux-centos7_x86_64-7.3.2.tar.gz | tar xzC /opt && \
+RUN curl -L --progress-bar https://surfer.nmr.mgh.harvard.edu/pub/dist/freesurfer/${FREESURFER_VERSION}/freesurfer-linux-centos7_x86_64-${FREESURFER_VERSION}.tar.gz | tar xzC /opt && \
     echo ". /opt/freesurfer/SetUpFreeSurfer.sh" >> ~/.bashrc
 
 # set bash as default terminal
@@ -60,15 +61,11 @@ ENV PATH=/opt/freesurfer/bin:/opt/freesurfer/fsfast/bin:/opt/freesurfer/tktools:
     MNI_PERL5LIB=/opt/freesurfer/mni/share/perl5 \
     PERL5LIB=/opt/freesurfer/mni/share/perl5
 
-# install dependencies
-RUN pip3 install --upgrade pip
-
-ADD requirements.txt /petdeface/requirements.txt
-
-RUN pip3 install -r  /petdeface/requirements.txt
-
 # copy the project
 COPY . /petdeface
+
+# install dependencies
+RUN pip3 install --upgrade pip && cd /petdeface && pip3 install -e .
 
 # set the entrypoint to the main executable petdeface.py
 ENTRYPOINT ["python3", "/petdeface/petdeface/petdeface.py"]
