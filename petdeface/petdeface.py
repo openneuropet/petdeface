@@ -3,6 +3,8 @@ import json
 import os
 import pathlib
 import re
+import shutil
+import tempfile
 
 # import shutil
 import subprocess
@@ -132,12 +134,30 @@ def check_docker_image_exists(image_name, build=False):
     if build:
         try:
             # get dockerfile path
-            dockerfile_path = pathlib.Path(__file__).parent / pathlib.Path("Dockerfile")
-            subprocess.run(
-                ["docker", "build", "-t", image_name, str(dockerfile_path)],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                check=True,
+            this_files_folder  = pathlib.Path(__file__).parent.resolve()
+            dockerfile_path  = this_files_folder / pathlib.Path("Dockerfile")
+
+            # create a temporary directory to put the package into resembling the structure of the this package
+            # installed in python site-packages
+            with tempfile.TemporaryDirectory() as temp_dir:
+                # copy the package into the temporary directory
+                shutil.copytree(
+                    this_files_folder,
+                    os.path.join(temp_dir, "petdeface"),
+                    ignore=shutil.ignore_patterns("__pycache__"))
+                shutil.copy(dockerfile_path,
+                            os.path.join(temp_dir, "Dockerfile"))
+                shutil.copy(os.path.join(this_files_folder, "pyproject.toml"),
+                            os.path.join(temp_dir, "pyproject.toml"))
+                shutil.copy(os.path.join(this_files_folder, "README.md"),
+                            os.path.join(temp_dir, "README.md"))
+                # change the working directory to the temporary directory
+                os.chdir(temp_dir)
+                # build the docker image
+                subprocess.run(
+                    ["docker", "build", '.', "-t", image_name,],
+                    check=True,
+                    cwd=str(temp_dir)
             )
             image_exists = True
             print("Docker image {} has been built.".format(image_name))
@@ -502,7 +522,13 @@ def main():  # noqa: max-complexity: 12
 
     if args.docker:
         check_docker_installed()
-        check_docker_image_exists("petdeface", build=False)
+        image_exists = check_docker_image_exists(f"petdeface:{__version__}", build=False)
+        if not image_exists:
+            built_image = check_docker_image_exists(f"petdeface:{__version__}", build=True)
+            if not built_image:
+                #TODO add docker pull
+                pass
+
 
         input_mount_point = str(args.input_dir)
         output_mount_point = str(args.output_dir)

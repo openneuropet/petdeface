@@ -6,8 +6,7 @@ authors = ["Martin Nørgaard <martin.noergaard@nru.dk>", "Anthony Galassi <28850
 license = "MIT"
 readme = "README.md"
 include = [
-    "petdeface/*",
-    "pyproject.toml",
+    "petdeface/*"
 ]
 
 # please update the bids version to the latest compliant version when making modifications to this code here
