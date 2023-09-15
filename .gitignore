@@ -28,6 +28,7 @@ scratch/
 
 # integration testing scripts using unpublishable dicoms
 integration_testing.sh
+scripts/
 
 petdeface/pyproject.toml
 petdeface/Dockerfile

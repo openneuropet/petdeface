@@ -273,7 +273,17 @@ def init_single_subject_wf(subject_id: str, bids_dir: str) -> Workflow:
     t1w_wf = Workflow(name="t1w_wf")
     unique_t1w_best_matches = sorted(set(t1w_best_matches))
     for j, t1w_file in enumerate(unique_t1w_best_matches):
-        ses_id = re.search("/ses-(.+?)/", t1w_file).group(1)
+        try:
+            ses_id = re.search("/ses-(.+?)/", t1w_file).group(1)
+        except AttributeError:
+            ses_id = None
+        if not ses_id:
+            out_file = f"sub-{subject_id}.anat"
+            out_facemask = f"sub-{subject_id}.anat.@facemask"
+        else:
+            out_file = f"sub-{subject_id}.ses-{ses_id}.anat"
+            out_facemask = f"sub-{subject_id}.ses-{ses_id}.anat.@facemask"
+
         deface_t1w = Node(
             Mideface(in_file=t1w_file),
             name=f"deface_t1w{j}",
@@ -284,11 +294,8 @@ def init_single_subject_wf(subject_id: str, bids_dir: str) -> Workflow:
                     deface_t1w,
                     datasink,
                     [
-                        ("out_file", f"sub-{subject_id}.ses-{ses_id}.anat"),
-                        (
-                            "out_facemask",
-                            f"sub-{subject_id}.ses-{ses_id}.anat.@facemask",
-                        ),
+                        ("out_file", out_file),
+                        ("out_facemask",out_facemask,),
                     ],
                 ),
             ]
