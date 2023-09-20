@@ -1,11 +1,6 @@
 name: petdeface
 on:
   workflow_call:
-  push:
-  pull_request:
-    branches:
-      - main
-      - dev
   workflow_dispatch:
     inputs:
       debug_enabled:

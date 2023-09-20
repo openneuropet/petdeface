@@ -2,10 +2,11 @@ import pytest
 from pathlib import Path
 import shutil
 import bids
-import tempfile
 from petdeface.petdeface import PetDeface
 from os import cpu_count
 from bids.layout import BIDSLayout
+
+import tempfile
 
 # collect test bids dataset from data directory
 data_dir = Path(__file__).parent.parent / "data"

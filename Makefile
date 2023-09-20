@@ -4,8 +4,11 @@ black:
 		black $$file; \
 	done
 
-testlayouts:
+testlayoutsverbose:
 	pytest tests/test_dir_layouts.py -s -vv
+
+testlayouts:
+	pytest tests/test_dir_layouts.py
 
 # run all tests
 testall: testlayouts
@@ -13,4 +16,4 @@ testall: testlayouts
 
 # install python dependencies
 pythondeps:
-	pip install --upgrade pip && pip install  -e . && pip install -e .[dev]
+	pip install --upgrade pip && pip install  -e .
