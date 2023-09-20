@@ -27,6 +27,5 @@ jobs:
           python-version: 3.11
           cache: poetry
       - run: poetry install
-      - run: |
-          poetry shell 
-          make testall
+      - name: Run All Tests
+        run: poetry run make testall
