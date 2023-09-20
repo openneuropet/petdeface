@@ -28,5 +28,5 @@ jobs:
           cache: poetry
       - run: poetry install
       - run: |
-        poetry shell 
-        make testall
+          poetry shell 
+          make testall
