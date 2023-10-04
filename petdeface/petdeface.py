@@ -255,7 +255,7 @@ def init_single_subject_wf(subject_id: str, bids_dir: str) -> Workflow:
     for j, t1w_file in enumerate(unique_t1w_best_matches):
         ses_id = re.search("/ses-(.+?)/", t1w_file)
         if ses_id:
-            ses_id = f".ses-{ses_id.group(1)}_"
+            ses_id = f".ses-{ses_id.group(1)}"
         else:
             ses_id = ""
         deface_t1w = Node(
