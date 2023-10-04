@@ -33,6 +33,9 @@ echo Removing contents of existing output directory at $OUTPUT_DIR
 mkdir -p $OUTPUT_DIR
 rm -rf $OUTPUT_DIR/*
 
+echo Removing petdeface contents from derivatives folder in $INPUT_DIR/derivatives/petdeface
+rm -rf $INPUT_DIR/derivatives/petdeface/*
+
 echo running the following command:
 echo python3 petdeface/petdeface.py $INPUT_DIR \
 --output $OUTPUT_DIR \

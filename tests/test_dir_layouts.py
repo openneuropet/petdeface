@@ -5,6 +5,7 @@ import bids
 from petdeface.petdeface import PetDeface
 from os import cpu_count
 from bids.layout import BIDSLayout
+import subprocess
 
 import tempfile
 
