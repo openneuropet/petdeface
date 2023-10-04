@@ -26,5 +26,12 @@ scratch.txt
 # ignore scratch folder
 scratch/
 
+# ignore scripts folder, for now
+scripts/
+
 # integration testing scripts using unpublishable dicoms
 integration_testing.sh
+
+petdeface/Dockerfile
+petdeface/README.md
+petdeface/pyproject.toml
