@@ -1,0 +1,26 @@
+name: petdeface
+on:
+  workflow_call:
+  workflow_dispatch:
+    inputs:
+      debug_enabled:
+        type: boolean
+        description: 'Run the build with tmate debugging enabled (https://github.com/marketplace/actions/debugging-with-tmate)'
+        required: false
+        default: false
+
+jobs:
+  test_petdeface:
+    runs-on: ubuntu-latest
+    name: Test petdeface
+    steps:
+      - uses: actions/checkout@v3
+      - name: Install Poetry
+        run: pipx install poetry
+      - uses: actions/setup-python@v4
+        with:
+          python-version: 3.11
+          cache: poetry
+      - run: poetry install
+      - name: Run All Tests
+        run: poetry run make testall
