@@ -235,7 +235,7 @@ def init_single_subject_wf(
     output_dir.mkdir(parents=True, exist_ok=True)
 
     datasink = Node(
-        DataSink(base_directory=os.path.join(output_dir, "derivatives", "petdeface")),
+        DataSink(base_directory=str(output_dir)),
         name="sink",
     )
 
@@ -279,10 +279,10 @@ def init_single_subject_wf(
     for pet_file, t1w_file in subject_data.items():
         try:
             ses_id = re.search("ses-[^_|\/]*", str(pet_file)).group(0)
-            pet_string = f"{subject_id}_{ses_id}"
+            pet_string = f"sub-{subject_id}_{ses_id}"
         except AttributeError:
             ses_id = ""
-            pet_string = f"{subject_id}"
+            pet_string = f"sub-{subject_id}"
 
         pet_wf_name = f"pet_{pet_string}_wf"
         pet_wf = Workflow(name=pet_wf_name)
