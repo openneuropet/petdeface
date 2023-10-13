@@ -764,13 +764,13 @@ files = [
 
 [[package]]
 name = "interface-meta"
-version = "1.2.5"
-description = "InterfaceMeta"
+version = "1.3.0"
+description = "`interface_meta` provides a convenient way to expose an extensible API with enforced method signatures and consistent documentation."
 optional = false
-python-versions = ">=3.4"
+python-versions = ">=3.7,<4.0"
 files = [
-    {file = "interface_meta-1.2.5-py2.py3-none-any.whl", hash = "sha256:18a220f5db197e8a7f548bca74a860c7859b7cd9638a640c46035d88410e1dd3"},
-    {file = "interface_meta-1.2.5.tar.gz", hash = "sha256:0c81910ac200a343794db13062775592e4c96cc9f0d55ea5385cdc388945b17d"},
+    {file = "interface_meta-1.3.0-py3-none-any.whl", hash = "sha256:de35dc5241431886e709e20a14d6597ed07c9f1e8b4bfcffde2190ca5b700ee8"},
+    {file = "interface_meta-1.3.0.tar.gz", hash = "sha256:8a4493f8bdb73fb9655dcd5115bc897e207319e36c8835f39c516a2d7e9d79a1"},
 ]
 
 [[package]]
@@ -1619,6 +1619,21 @@ files = [
 ]
 
 [[package]]
+name = "petutils"
+version = "0.0.0"
+description = ""
+optional = false
+python-versions = ">=3.10,<4.0"
+files = [
+    {file = "petutils-0.0.0-py3-none-any.whl", hash = "sha256:df8d8e13db5e8275a1ff8286a3b7eef0e82cdedacc975106eada16d6a8eed638"},
+    {file = "petutils-0.0.0.tar.gz", hash = "sha256:b4b664458af4a9ddd21e915c617e9bb33ed774405b2b1421b28203a2e11f0f07"},
+]
+
+[package.dependencies]
+nipype = ">=1.8.6,<2.0.0"
+pybids = ">=0.16.3,<0.17.0"
+
+[[package]]
 name = "pillow"
 version = "10.0.1"
 description = "Python Imaging Library (Fork)"
@@ -1735,13 +1750,13 @@ virtualenv = ">=20.10.0"
 
 [[package]]
 name = "prov"
-version = "1.5.3"
+version = "2.0.0"
 description = "A library for W3C Provenance Data Model supporting PROV-JSON, PROV-XML and PROV-O (RDF)"
 optional = false
-python-versions = "*"
+python-versions = ">=3.6, <4"
 files = [
-    {file = "prov-1.5.3-py2.py3-none-any.whl", hash = "sha256:b9c553cc0775bf193eb62de69e2a2b3bab545ab8e6bf597be243e8f0916e1d1b"},
-    {file = "prov-1.5.3.tar.gz", hash = "sha256:a0c951107eafd508d5a26caa54863dc11fee3da86778db2a559d32450d2030a9"},
+    {file = "prov-2.0.0-py3-none-any.whl", hash = "sha256:aaccc7c6ad6ec662fd1561c872991f13cd7df368d6dcab9cbac19fccc491d970"},
+    {file = "prov-2.0.0.tar.gz", hash = "sha256:b6438f2195ecb9f6e8279b58971e02bc51814599b5d5383366eef91d867422ee"},
 ]
 
 [package.dependencies]
@@ -1749,7 +1764,6 @@ lxml = ">=3.3.5"
 networkx = ">=2.0"
 python-dateutil = ">=2.2"
 rdflib = ">=4.2.1"
-six = ">=1.9.0"
 
 [package.extras]
 dot = ["pydot (>=1.2.0)"]
@@ -1945,27 +1959,24 @@ files = [
 
 [[package]]
 name = "rdflib"
-version = "6.2.0"
+version = "7.0.0"
 description = "RDFLib is a Python library for working with RDF, a simple yet powerful language for representing information."
 optional = false
-python-versions = ">=3.7"
+python-versions = ">=3.8.1,<4.0.0"
 files = [
-    {file = "rdflib-6.2.0-py3-none-any.whl", hash = "sha256:85c34a86dfc517a41e5f2425a41a0aceacc23983462b32e68610b9fad1383bca"},
-    {file = "rdflib-6.2.0.tar.gz", hash = "sha256:62dc3c86d1712db0f55785baf8047f63731fa59b2682be03219cb89262065942"},
+    {file = "rdflib-7.0.0-py3-none-any.whl", hash = "sha256:0438920912a642c866a513de6fe8a0001bd86ef975057d6962c79ce4771687cd"},
+    {file = "rdflib-7.0.0.tar.gz", hash = "sha256:9995eb8569428059b8c1affd26b25eac510d64f5043d9ce8c84e0d0036e995ae"},
 ]
 
 [package.dependencies]
-isodate = "*"
-pyparsing = "*"
-setuptools = "*"
+isodate = ">=0.6.0,<0.7.0"
+pyparsing = ">=2.1.0,<4"
 
 [package.extras]
-berkeleydb = ["berkeleydb"]
-dev = ["black (==22.6.0)", "flake8", "flakeheaven", "isort", "mypy", "pep8-naming", "types-setuptools"]
-docs = ["myst-parser", "sphinx (<6)", "sphinx-autodoc-typehints", "sphinxcontrib-apidoc", "sphinxcontrib-kroki"]
-html = ["html5lib"]
-networkx = ["networkx"]
-tests = ["html5lib", "pytest", "pytest-cov"]
+berkeleydb = ["berkeleydb (>=18.1.0,<19.0.0)"]
+html = ["html5lib (>=1.0,<2.0)"]
+lxml = ["lxml (>=4.3.0,<5.0.0)"]
+networkx = ["networkx (>=2.0.0,<3.0.0)"]
 
 [[package]]
 name = "requests"
@@ -2685,5 +2696,5 @@ files = [
 
 [metadata]
 lock-version = "2.0"
-python-versions = ">=3.10"
-content-hash = "cbebb15917ad81eb9c081d587607a9eb851b6c853b272db6da059f98d4346eb4"
+python-versions = ">=3.10, <4.0"
+content-hash = "d291bc700f628a872e2bdc43be646fec1669725607c7efcad2e6e134fb7ce8a9"
