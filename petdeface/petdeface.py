@@ -3,6 +3,7 @@ import json
 import os
 import pathlib
 import re
+from bids import BIDSLayout
 
 # import shutil
 import subprocess
@@ -15,6 +16,8 @@ from niworkflows.engine.workflows import LiterateWorkflow as Workflow
 from niworkflows.utils.bids import collect_data
 from niworkflows.utils.bids import collect_participants
 from niworkflows.utils.misc import check_valid_fs_license
+
+from petutils.petutils import collect_anat_and_pet
 
 
 try:
@@ -202,7 +205,11 @@ def count_matching_chars(a: str, b: str) -> int:
     return result
 
 
-def init_single_subject_wf(subject_id: str, bids_dir: str) -> Workflow:
+def init_single_subject_wf(
+    subject_id: str,
+    bids_data: [pathlib.Path, BIDSLayout],
+    output_dir: pathlib.Path = None,
+) -> Workflow:
     """Organize the preprocessing pipeline for a single subject.
 
     Args:
@@ -212,55 +219,45 @@ def init_single_subject_wf(subject_id: str, bids_dir: str) -> Workflow:
         workflow for subject
     """
     name = f"single_subject_{subject_id}_wf"
-    subject_data = collect_data(
-        bids_dir,
-        subject_id,
-    )[0]
 
-    if not subject_data["pet"]:
-        raise RuntimeError(
-            "No PET images found for participant {}. "
-            "All workflows require PET images.".format(subject_id)
-        )
+    if isinstance(bids_data, pathlib.Path):
+        bids_data = BIDSLayout(bids_data)
+    elif isinstance(bids_data, BIDSLayout):
+        pass
 
-    if not subject_data["t1w"]:
-        raise RuntimeError(
-            "No T1w images found for participant {}. "
-            "All workflows require T1w images.".format(subject_id)
-        )
+    data = collect_anat_and_pet(bids_data)
+    subject_data = data.get(subject_id)
+    bids_dir = bids_data.root
 
-    # find the best matching t1w for each pet
-    # we do this by comparing file names and picking the t1w that has the highest
-    # number of matching characters with pet up to first discrepancy
-    t1w_best_matches = []
-    for pet_file in subject_data["pet"]:
-        t1w_best_matches.append(
-            sorted(
-                subject_data["t1w"], key=lambda x: -count_matching_chars(pet_file, x)
-            )[0]
-        )
+    if not output_dir:
+        output_dir = pathlib.Path(bids_dir) / "derivatives" / "petdeface"
+
+    output_dir.mkdir(parents=True, exist_ok=True)
 
     datasink = Node(
-        DataSink(base_directory=os.path.join(bids_dir, "derivatives", "petdeface")),
+        DataSink(base_directory=os.path.join(output_dir, "derivatives", "petdeface")),
         name="sink",
     )
 
     # deface t1w(s)
-    # defacing is not necessary for MRIs without a matching PET
     # an MRI might get matched with multiple PET scans, but we need to run
-    # deface only once
-    # t1w_wf = Workflow(name=f"single_subject_t1w_{subject_id}_wf")
-    t1w_wf = Workflow(name="t1w_wf")
-    unique_t1w_best_matches = sorted(set(t1w_best_matches))
-    for j, t1w_file in enumerate(unique_t1w_best_matches):
-        ses_id = re.search("/ses-(.+?)/", t1w_file)
+    # deface only once per MRI. This MRI file is the value for each entry in the output of
+    # petutils.collect_anat_and_pet
+    for t1w_file in set(subject_data.values()):
+        ses_id = re.search("ses-[^_|\/]*", t1w_file)
         if ses_id:
-            ses_id = f".ses-{ses_id.group(1)}"
+            ses_id = f"ses-{ses_id.group(0)}"
+            anat_string = f"sub-{subject_id}_{ses_id}"
         else:
             ses_id = ""
+            anat_string = f"sub-{subject_id}"
+
+        workflow_name = f"t1w_{anat_string}_wf"
+
+        t1w_wf = Workflow(name=workflow_name)
         deface_t1w = Node(
             Mideface(in_file=t1w_file),
-            name=f"deface_t1w{j}",
+            name=f"deface_t1w_{anat_string}",
         )
         t1w_wf.connect(
             [
@@ -268,10 +265,10 @@ def init_single_subject_wf(subject_id: str, bids_dir: str) -> Workflow:
                     deface_t1w,
                     datasink,
                     [
-                        ("out_file", f"sub-{subject_id}{ses_id}.anat"),
+                        ("out_file", f"{anat_string}.anat"),
                         (
                             "out_facemask",
-                            f"sub-{subject_id}{ses_id}.anat.@facemask",
+                            f"{anat_string}.anat.@facemask",
                         ),
                     ],
                 ),
@@ -279,18 +276,23 @@ def init_single_subject_wf(subject_id: str, bids_dir: str) -> Workflow:
         )
 
     workflow = Workflow(name=name)
-    for i, pet_file in enumerate(subject_data["pet"]):
-        ses_id = re.search("/ses-(.+?)/", str(subject_data["pet"])).group(1)
+    for pet_file, t1w_file in subject_data.items():
+        try:
+            ses_id = re.search("ses-[^_|\/]*", str(pet_file)).group(0)
+            pet_string = f"{subject_id}_{ses_id}"
+        except AttributeError:
+            ses_id = ""
+            pet_string = f"{subject_id}"
 
-        t1w_best_match = t1w_best_matches[i]
-        pet_wf = Workflow(name=f"pet{i}_wf")
+        pet_wf_name = f"pet_{pet_string}_wf"
+        pet_wf = Workflow(name=pet_wf_name)
 
         weighted_average = Node(
             WeightedAverage(pet_file=pet_file), name="weighted_average"
         )
 
         coreg_pet_to_t1w = Node(
-            MRICoreg(reference_file=t1w_best_match), name="coreg_pet_to_t1w"
+            MRICoreg(reference_file=t1w_file), name="coreg_pet_to_t1w"
         )
 
         deface_pet = Node(ApplyMideface(in_file=pet_file), name="deface_pet")
@@ -302,20 +304,24 @@ def init_single_subject_wf(subject_id: str, bids_dir: str) -> Workflow:
                 (
                     coreg_pet_to_t1w,
                     datasink,
-                    [("out_lta_file", f"sub-{subject_id}.ses-{ses_id}.pet")],
+                    [("out_lta_file", f"{pet_string}.pet")],
                 ),
                 (
                     deface_pet,
                     datasink,
-                    [("out_file", f"sub-{subject_id}.ses-{ses_id}.pet.@defaced")],
+                    [("out_file", f"{pet_string}.pet.@defaced")],
                 ),
             ]
         )
 
-        # find the t1w index
-        j = unique_t1w_best_matches.index(t1w_best_match)
         workflow.connect(
-            [(t1w_wf, pet_wf, [(f"deface_t1w{j}.out_facemask", "deface_pet.facemask")])]
+            [
+                (
+                    t1w_wf,
+                    pet_wf,
+                    [(f"deface_t1w_{anat_string}.out_facemask", "deface_pet.facemask")],
+                )
+            ]
         )
 
     return workflow
