@@ -243,10 +243,11 @@ def init_single_subject_wf(
     # an MRI might get matched with multiple PET scans, but we need to run
     # deface only once per MRI. This MRI file is the value for each entry in the output of
     # petutils.collect_anat_and_pet
+    t1w_workflows = {}
     for t1w_file in set(subject_data.values()):
         ses_id = re.search("ses-[^_|\/]*", t1w_file)
         if ses_id:
-            ses_id = f"ses-{ses_id.group(0)}"
+            ses_id = f"{ses_id.group(0)}"
             anat_string = f"sub-{subject_id}_{ses_id}"
         else:
             ses_id = ""
@@ -265,15 +266,16 @@ def init_single_subject_wf(
                     deface_t1w,
                     datasink,
                     [
-                        ("out_file", f"{anat_string}.anat"),
+                        ("out_file", f"{anat_string.replace('_', '.')}.anat"),
                         (
                             "out_facemask",
-                            f"{anat_string}.anat.@facemask",
+                            f"{anat_string.replace('_', '.')}.anat.@facemask",
                         ),
                     ],
                 ),
             ]
         )
+        t1w_workflows[t1w_file] = {'workflow': t1w_wf, 'anat_string': anat_string}
 
     workflow = Workflow(name=name)
     for pet_file, t1w_file in subject_data.items():
@@ -304,12 +306,12 @@ def init_single_subject_wf(
                 (
                     coreg_pet_to_t1w,
                     datasink,
-                    [("out_lta_file", f"{pet_string}.pet")],
+                    [("out_lta_file", f"{pet_string.replace('_', '.')}.pet")],
                 ),
                 (
                     deface_pet,
                     datasink,
-                    [("out_file", f"{pet_string}.pet.@defaced")],
+                    [("out_file", f"{pet_string.replace('_', '.')}.pet.@defaced")],
                 ),
             ]
         )
@@ -317,9 +319,9 @@ def init_single_subject_wf(
         workflow.connect(
             [
                 (
-                    t1w_wf,
+                    t1w_workflows[t1w_file]['workflow'],
                     pet_wf,
-                    [(f"deface_t1w_{anat_string}.out_facemask", "deface_pet.facemask")],
+                    [(f"deface_t1w_{t1w_workflows[t1w_file]['anat_string']}.out_facemask", "deface_pet.facemask")],
                 )
             ]
         )
