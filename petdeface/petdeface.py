@@ -11,6 +11,7 @@ from typing import Union
 
 from nipype.interfaces.freesurfer import MRICoreg
 from nipype.interfaces.io import DataSink
+from nipype.interfaces.base.traits_extension import File as traits_extensionFile
 from nipype.pipeline import Node
 from niworkflows.engine.workflows import LiterateWorkflow as Workflow
 from niworkflows.utils.bids import collect_data
@@ -269,13 +270,13 @@ def init_single_subject_wf(
                         ("out_file", f"{anat_string.replace('_', '.')}.anat"),
                         (
                             "out_facemask",
-                            f"{anat_string.replace('_', '.')}.anat.@facemask",
+                            f"{anat_string.replace('_', '.')}.anat.@defacemask",
                         ),
                     ],
                 ),
             ]
         )
-        t1w_workflows[t1w_file] = {'workflow': t1w_wf, 'anat_string': anat_string}
+        t1w_workflows[t1w_file] = {"workflow": t1w_wf, "anat_string": anat_string}
 
     workflow = Workflow(name=name)
     for pet_file, t1w_file in subject_data.items():
@@ -319,9 +320,14 @@ def init_single_subject_wf(
         workflow.connect(
             [
                 (
-                    t1w_workflows[t1w_file]['workflow'],
+                    t1w_workflows[t1w_file]["workflow"],
                     pet_wf,
-                    [(f"deface_t1w_{t1w_workflows[t1w_file]['anat_string']}.out_facemask", "deface_pet.facemask")],
+                    [
+                        (
+                            f"deface_t1w_{t1w_workflows[t1w_file]['anat_string']}.out_facemask",
+                            "deface_pet.facemask",
+                        )
+                    ],
                 )
             ]
         )
