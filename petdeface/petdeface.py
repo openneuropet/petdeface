@@ -3,6 +3,8 @@ import json
 import os
 import pathlib
 import re
+import sys
+import shutil
 from bids import BIDSLayout
 
 # import shutil
@@ -370,6 +372,168 @@ def write_out_dataset_description_json(input_bids_dir, output_bids_dir=None):
         json.dump(dataset_description, f, indent=4)
 
 
+def wrap_up_defacing(
+    path_to_dataset, output_dir=None, placement="adjacent", remove_existing=True
+):
+    """
+    This function maps the output of this pipeline to the original dataset and depending on the
+    flag/arg for placement either replaces the defaced images in the same directory as the original images,
+    creates a copy of the original dataset at {path_to_dataset}_defaced and places the defaced images there
+    along with the defacing masks and registration files at the copied dir in the deriviatives folder, or lastly
+    leaves things well enough alone and just places the defaced images in the derivatives folder (does nothing).
+    Parameters
+    ----------
+    path_to_dataset : path like object (str or pathlib.Path)
+        Path to original dataset
+    output_dir : path like object (str or pathib.Path), optional
+        Specific directory to place output, this seems redundant given placemnent, by default None
+    placement : str, optional
+        Can be one of three values
+        - adjacent creates (but doesn't overrwrite) a new dataset with only defaced images
+        - inplace replaces original images with defaced versions (not recommended)
+        - derivatives does nothing, defaced images exist only within the derivitives/petdeface dir
+        by default "adjacent"
+    """
+    # get bids layout of dataset
+    layout = BIDSLayout(path_to_dataset, derivatives=True)
+
+    # collect defaced images
+    try:
+        defacing_files = [f for f in layout.get() if "defaced" in str(f)]
+    except ValueError as err:
+        print(err)
+        print(
+            f"No defaced images found at {path_to_dataset}, you might need to rerun the petdeface workflow"
+        )
+        sys.exit(1)
+
+    # collect all original images and jsons
+    raw_only = BIDSLayout(path_to_dataset, derivatives=False)
+    raw_images_only = raw_only.get(suffix=["pet", "T1w"])
+
+    # if output_dir is not None and is not the same as the input dir we want to clear it out
+    if output_dir is not None and output_dir != path_to_dataset and remove_existing:
+        if os.path.exists(output_dir):
+            shutil.rmtree(output_dir)
+        pathlib.Path(output_dir).mkdir(parents=True, exist_ok=True, mode=0o775)
+
+    # create dictionary of original images and defaced images
+    mapping_dict = {}
+    for defaced in defacing_files:
+        for raw in raw_images_only:
+            if (defaced.filename).replace("_defaced", "") == raw.filename:
+                mapping_dict[defaced] = raw
+
+    if placement == "adjacent":
+        if output_dir is None or output_dir == path_to_dataset:
+            final_destination = f"{path_to_dataset}_defaced"
+        else:
+            final_destination = output_dir
+
+        # copy original dataset to new location
+        for entry in raw_only.files:
+            copy_path = entry.replace(str(path_to_dataset), str(final_destination))
+            pathlib.Path(copy_path).parent.mkdir(
+                parents=True, exist_ok=True, mode=0o775
+            )
+            if entry != copy_path:
+                shutil.copy(entry, copy_path)
+
+        # update paths in mapping dict
+        move_defaced_images(mapping_dict, final_destination)
+
+        # we also want to carry over the defacing masks and registration files
+        masks_and_reg = list(
+            set(
+                layout.get(extension=["mgz", "lta"])
+                + layout.get(suffix="defacemask", extension=["nii.gz", "nii", "mgz"])
+            )
+        )
+        derivatives_source_and_dest = {}
+        for file in masks_and_reg:
+            source_path = pathlib.Path(file.path)
+            dest_path = pathlib.Path(
+                file.path.replace(str(path_to_dataset), str(final_destination))
+            )
+            if dest_path.parent.exists() is False:
+                dest_path.parent.mkdir(parents=True, exist_ok=True, mode=0o775)
+            try:
+                shutil.copy(
+                    file.path,
+                    file.path.replace(str(path_to_dataset), str(final_destination)),
+                )
+            except shutil.SameFileError:
+                pass
+
+    elif placement == "inplace":
+        final_destination = path_to_dataset
+        move_defaced_images(mapping_dict, final_destination)
+        # remove all anat nii's and pet niis from derivatives folder
+        inplace_layout = BIDSLayout(path_to_dataset, derivatives=True)
+        derivatives = inplace_layout.get(
+            suffix=["pet", "T1w"],
+            extension=["nii.gz", "nii"],
+            desc="defaced",
+            return_type="file",
+        )
+        for extraneous in derivatives:
+            os.remove(extraneous)
+
+    elif placement == "derivatives":
+        pass
+    else:
+        raise ValueError(
+            "placement must be one of ['adjacent', 'inplace', 'derivatives']"
+        )
+
+    print(f"completed copying dataset to {final_destination}")
+
+
+def move_defaced_images(
+    mapping_dict: dict,
+    final_destination: Union[str, pathlib.Path],
+    include_extra_anat: bool = False,
+    move_files: bool = False,
+):
+    # update paths in mapping dict
+    for defaced, raw in mapping_dict.items():
+        # get common path and replace with final_destination to get new path
+        common_path = os.path.commonpath([defaced.path, raw.path])
+        new_path = pathlib.Path(
+            defaced.path.replace(common_path, str(final_destination)).replace(
+                "_defaced", ""
+            )
+        )
+        # replace derivative and pet deface parts of path
+        new_path = pathlib.Path(
+            *(
+                [
+                    part
+                    for part in new_path.parts
+                    if part != "derivatives" and part != "petdeface"
+                ]
+            )
+        )
+        mapping_dict[defaced] = new_path
+
+    # copy defaced images to new location
+    for defaced, raw in mapping_dict.items():
+        # it should be noted that the defacing pipeline creates a copy of the t1w image and json in an anat folder
+        # for every session. This isn't always desirable.
+        if (
+            pathlib.Path(raw).exists()
+            and pathlib.Path(defaced).exists()
+            and not include_extra_anat
+        ):
+            shutil.copy(defaced.path, raw)
+        else:
+            pathlib.Path(raw).parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy(defaced.path, raw)
+
+        if move_files:
+            os.remove(defaced.path)
+
+
 class PetDeface:
     def __init__(
         self,
@@ -412,6 +576,13 @@ class PetDeface:
                 "placement": self.placement,
                 "remove_existing": self.remove_existing,
             }
+        )
+
+        wrap_up_defacing(
+            self.bids_dir,
+            self.output_dir,
+            placement=self.placement,
+            remove_existing=self.remove_existing,
         )
 
 
