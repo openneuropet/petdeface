@@ -19,7 +19,7 @@ class MidefaceInputSpec(CommandLineInputSpec):
         desc="Facemask",
         argstr="--facemask %s",
         name_source="in_file",
-        name_template="%s_facemask",
+        name_template="%s_defacemask",
         keep_extension=True,
     )
     odir = Directory(
