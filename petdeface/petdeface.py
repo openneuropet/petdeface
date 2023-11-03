@@ -6,6 +6,7 @@ import re
 import sys
 import shutil
 from bids import BIDSLayout
+import glob
 
 # import shutil
 import subprocess
@@ -180,8 +181,13 @@ def deface(args: Union[dict, argparse.Namespace]) -> None:
     petdeface_wf = Workflow(name="petdeface_wf", base_dir=output_dir)
 
     for subject_id in participants:
-        single_subject_wf = init_single_subject_wf(subject_id, args.bids_dir)
-        petdeface_wf.add_nodes([single_subject_wf])
+        try:
+            single_subject_wf = init_single_subject_wf(subject_id, args.bids_dir)
+        except FileNotFoundError:
+            single_subject_wf = None
+
+        if single_subject_wf:
+            petdeface_wf.add_nodes([single_subject_wf])
 
     try:
         petdeface_wf.write_graph("petdeface.dot", graph2use="colored", simple_form=True)
@@ -193,7 +199,7 @@ def deface(args: Union[dict, argparse.Namespace]) -> None:
     write_out_dataset_description_json(args.bids_dir)
 
     # remove temp outputs - this is commented out to enable easier testing for now
-    # shutil.rmtree(os.path.join(output_dir, "petdeface_wf"))
+    shutil.rmtree(os.path.join(output_dir, "petdeface_wf"))
 
 
 def count_matching_chars(a: str, b: str) -> int:
@@ -230,6 +236,14 @@ def init_single_subject_wf(
 
     data = collect_anat_and_pet(bids_data)
     subject_data = data.get(subject_id)
+
+    # check if any t1w images exist for the pet images
+    for pet_image, t1w_image in subject_data.items():
+        if t1w_image == "":
+            raise FileNotFoundError(
+                f"Could not find t1w image for pet image {pet_image}"
+            )
+
     bids_dir = bids_data.root
 
     if not output_dir:
@@ -260,7 +274,7 @@ def init_single_subject_wf(
 
         t1w_wf = Workflow(name=workflow_name)
         deface_t1w = Node(
-            Mideface(in_file=t1w_file),
+            Mideface(in_file=pathlib.Path(t1w_file)),
             name=f"deface_t1w_{anat_string}",
         )
         t1w_wf.connect(
@@ -421,7 +435,7 @@ def wrap_up_defacing(
     mapping_dict = {}
     for defaced in defacing_files:
         for raw in raw_images_only:
-            if (defaced.filename).replace("_defaced", "") == raw.filename:
+            if (defaced.filename).replace("_defaced.", ".") == raw.filename:
                 mapping_dict[defaced] = raw
 
     if placement == "adjacent":
@@ -486,6 +500,16 @@ def wrap_up_defacing(
             "placement must be one of ['adjacent', 'inplace', 'derivatives']"
         )
 
+    # clean up any errantly leftover files with globe in destination folder
+    leftover_files = [
+        pathlib.Path(defaced_nii)
+        for defaced_nii in glob.glob(
+            f"{final_destination}/**/*_defaced*.nii*", recursive=True
+        )
+    ]
+    for leftover in leftover_files:
+        leftover.unlink()
+
     print(f"completed copying dataset to {final_destination}")
 
 
@@ -500,10 +524,12 @@ def move_defaced_images(
         # get common path and replace with final_destination to get new path
         common_path = os.path.commonpath([defaced.path, raw.path])
         new_path = pathlib.Path(
-            defaced.path.replace(common_path, str(final_destination)).replace(
-                "_defaced", ""
-            )
+            defaced.path.replace(common_path, str(final_destination))
         )
+
+        if "_defaced." in str(new_path):
+            new_path = pathlib.Path(str(new_path).replace("_defaced.", "."))
+
         # replace derivative and pet deface parts of path
         new_path = pathlib.Path(
             *(
@@ -518,13 +544,7 @@ def move_defaced_images(
 
     # copy defaced images to new location
     for defaced, raw in mapping_dict.items():
-        # it should be noted that the defacing pipeline creates a copy of the t1w image and json in an anat folder
-        # for every session. This isn't always desirable.
-        if (
-            pathlib.Path(raw).exists()
-            and pathlib.Path(defaced).exists()
-            and not include_extra_anat
-        ):
+        if pathlib.Path(raw).exists() and pathlib.Path(defaced).exists():
             shutil.copy(defaced.path, raw)
         else:
             pathlib.Path(raw).parent.mkdir(parents=True, exist_ok=True)
@@ -577,7 +597,6 @@ class PetDeface:
                 "remove_existing": self.remove_existing,
             }
         )
-
         wrap_up_defacing(
             self.bids_dir,
             self.output_dir,
