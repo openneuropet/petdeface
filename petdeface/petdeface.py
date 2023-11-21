@@ -199,7 +199,7 @@ def deface(args: Union[dict, argparse.Namespace]) -> None:
     write_out_dataset_description_json(args.bids_dir)
 
     # remove temp outputs - this is commented out to enable easier testing for now
-    shutil.rmtree(os.path.join(output_dir, "petdeface_wf"))
+    #shutil.rmtree(os.path.join(output_dir, "petdeface_wf"))
 
 
 def count_matching_chars(a: str, b: str) -> int:
@@ -303,7 +303,12 @@ def init_single_subject_wf(
             ses_id = ""
             pet_string = f"sub-{subject_id}"
 
-        pet_wf_name = f"pet_{pet_string}_wf"
+        # collect run info from pet file
+        try:
+            run_id = "_" + re.search("run-[^_|\/]*", str(pet_file)).group(0)
+        except AttributeError:
+            run_id = ""
+        pet_wf_name = f"pet_{pet_string}{run_id}_wf"
         pet_wf = Workflow(name=pet_wf_name)
 
         weighted_average = Node(
@@ -323,12 +328,12 @@ def init_single_subject_wf(
                 (
                     coreg_pet_to_t1w,
                     datasink,
-                    [("out_lta_file", f"{pet_string.replace('_', '.')}.pet")],
+                    [("out_lta_file", f"{pet_string.replace('_', '.')}.pet.@{run_id}")],
                 ),
                 (
                     deface_pet,
                     datasink,
-                    [("out_file", f"{pet_string.replace('_', '.')}.pet.@defaced")],
+                    [("out_file", f"{pet_string.replace('_', '.')}.pet.@defaced{run_id}")],
                 ),
             ]
         )
