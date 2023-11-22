@@ -199,7 +199,7 @@ def deface(args: Union[dict, argparse.Namespace]) -> None:
     write_out_dataset_description_json(args.bids_dir)
 
     # remove temp outputs - this is commented out to enable easier testing for now
-    #shutil.rmtree(os.path.join(output_dir, "petdeface_wf"))
+    shutil.rmtree(os.path.join(output_dir, "petdeface_wf"))
 
 
 def count_matching_chars(a: str, b: str) -> int:
