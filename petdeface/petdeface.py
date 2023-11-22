@@ -303,16 +303,24 @@ def init_single_subject_wf(
             ses_id = ""
             pet_string = f"sub-{subject_id}"
 
-        pet_wf_name = f"pet_{pet_string}_wf"
+        # collect run info from pet file
+        try:
+            run_id = "_" + re.search("run-[^_|\/]*", str(pet_file)).group(0)
+        except AttributeError:
+            run_id = ""
+        pet_wf_name = f"pet_{pet_string}{run_id}_wf"
         pet_wf = Workflow(name=pet_wf_name)
 
         weighted_average = Node(
             WeightedAverage(pet_file=pet_file), name="weighted_average"
         )
 
-        coreg_pet_to_t1w = Node(
-            MRICoreg(reference_file=t1w_file), name="coreg_pet_to_t1w"
-        )
+        # rename registration file to something more descriptive than registration.lta
+        # we do this here to account for mulitple runs during the same session
+        mricoreg = MRICoreg(reference_file=t1w_file, name="coreg_pet_to_t1w")
+        mricoreg.inputs.out_lta_file = f"{pet_string}{run_id}_desc-pet2anat_pet.lta"
+
+        coreg_pet_to_t1w = Node(mricoreg, "coreg_pet_to_t1w")
 
         deface_pet = Node(ApplyMideface(in_file=pet_file), name="deface_pet")
 
@@ -323,12 +331,17 @@ def init_single_subject_wf(
                 (
                     coreg_pet_to_t1w,
                     datasink,
-                    [("out_lta_file", f"{pet_string.replace('_', '.')}.pet")],
+                    [("out_lta_file", f"{pet_string.replace('_', '.')}.pet.@{run_id}")],
                 ),
                 (
                     deface_pet,
                     datasink,
-                    [("out_file", f"{pet_string.replace('_', '.')}.pet.@defaced")],
+                    [
+                        (
+                            "out_file",
+                            f"{pet_string.replace('_', '.')}.pet.@defaced{run_id}",
+                        )
+                    ],
                 ),
             ]
         )
