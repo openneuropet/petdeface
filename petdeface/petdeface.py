@@ -310,13 +310,19 @@ def init_single_subject_wf(
             run_id = ""
         pet_wf_name = f"pet_{pet_string}{run_id}_wf"
         pet_wf = Workflow(name=pet_wf_name)
-
+        
+        # rename registration file to something more descriptive than registration.lta
+        #datasink.inputs.substitutions = [("registration.lta", f"{pet_string}{run_id}_desc-pet2anat_pet.lta")]
         weighted_average = Node(
             WeightedAverage(pet_file=pet_file), name="weighted_average"
         )
+        
+        mricoreg = MRICoreg(reference_file=t1w_file)
+        mricoreg.inputs.out_lta_file = f"{pet_string}{run_id}_desc-pet2anat_pet.lta"   
 
         coreg_pet_to_t1w = Node(
-            MRICoreg(reference_file=t1w_file), name="coreg_pet_to_t1w"
+            mricoreg, "coreg_pet_to_t1w"
+            #MRICoreg(reference_file=t1w_file), name="coreg_pet_to_t1w"
         )
 
         deface_pet = Node(ApplyMideface(in_file=pet_file), name="deface_pet")
