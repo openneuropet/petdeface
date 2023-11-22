@@ -317,7 +317,7 @@ def init_single_subject_wf(
 
         # rename registration file to something more descriptive than registration.lta
         # we do this here to account for mulitple runs during the same session
-        mricoreg = MRICoreg(reference_file=t1w_file, name="coreg_pet_to_t1w")
+        mricoreg = MRICoreg(reference_file=t1w_file)
         mricoreg.inputs.out_lta_file = f"{pet_string}{run_id}_desc-pet2anat_pet.lta"
 
         coreg_pet_to_t1w = Node(mricoreg, "coreg_pet_to_t1w")
