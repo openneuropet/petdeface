@@ -256,6 +256,9 @@ def init_single_subject_wf(
         name="sink",
     )
 
+    datasink.inputs.substitutions = [(".face-after", "_desc-faceafter_T1w"),
+                                     ('.face-before', '_desc-facebefore_T1w')]
+
     # deface t1w(s)
     # an MRI might get matched with multiple PET scans, but we need to run
     # deface only once per MRI. This MRI file is the value for each entry in the output of
@@ -288,6 +291,8 @@ def init_single_subject_wf(
                             "out_facemask",
                             f"{anat_string.replace('_', '.')}.anat.@defacemask",
                         ),
+                        ("out_before_pic", f"{anat_string.replace('_', '.')}.anat.@before"),
+                        ("out_after_pic", f"{anat_string.replace('_', '.')}.anat.@after"),
                     ],
                 ),
             ]
