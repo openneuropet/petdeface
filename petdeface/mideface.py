@@ -157,21 +157,23 @@ class Mideface(CommandLine):
     input_spec = MidefaceInputSpec
     output_spec = MidefaceOutputSpec
 
-    # def _list_outputs(self):
-    #     outputs = self.output_spec().get()
-    #     pics = self.inputs.pics
-    #     if isdefined(self.inputs.odir) and isdefined(self.inputs.pics) and isdefined(self.inputs.code_name):
-    #         if pics is True:
-    #             out_before_pic = f"{self.inputs.odir}/{self.inputs.code_name}.face-before.png"
-    #             out_after_pic = f"{self.inputs.odir}/{self.inputs.code_name}.face-after.png"
-    #             outputs["out_before_pic"] = os.path.abspath(out_before_pic)
-    #             outputs["out_after_pic"] = os.path.abspath(out_after_pic)
-    #     if isdefined(self.inputs.out_file):
-    #         outputs["out_file"] = os.path.abspath(self.inputs.out_file)
-    #     if isdefined(self.inputs.out_facemask):
-    #         outputs["out_facemask"] = os.path.abspath(self.inputs.out_facemask)
-    #     return outputs
 
+    def _list_outputs(self):
+        metadata = dict(name_source=lambda t: t is not None)
+        traits = self.inputs.traits(**metadata)
+        if traits:
+            outputs = self.output_spec().trait_get()
+            for name, trait_spec in list(traits.items()):
+                out_name = name
+                if trait_spec.output_name is not None:
+                    out_name = trait_spec.output_name
+                fname = self._filename_from_source(name)
+                if isdefined(fname):
+                    outputs[out_name] = os.path.abspath(fname)
+            if self.inputs.pics is True and self.inputs.odir is not None and self.inputs.code is not None:
+                outputs["out_before_pic"] = os.path.abspath(f"{self.inputs.odir}/{self.inputs.code}.face-before.png")
+                outputs["out_after_pic"] = os.path.abspath(f"{self.inputs.odir}/{self.inputs.code}.face-after.png")
+            return outputs
 
 
 class ApplyMidefaceInputSpec(CommandLineInputSpec):
