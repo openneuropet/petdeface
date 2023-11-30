@@ -274,7 +274,7 @@ def init_single_subject_wf(
 
         t1w_wf = Workflow(name=workflow_name)
         deface_t1w = Node(
-            Mideface(in_file=pathlib.Path(t1w_file)),
+            Mideface(in_file=pathlib.Path(t1w_file), pics=True, odir=".", code=f"{anat_string}"),
             name=f"deface_t1w_{anat_string}",
         )
         t1w_wf.connect(

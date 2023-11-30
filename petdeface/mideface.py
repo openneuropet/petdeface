@@ -4,6 +4,9 @@ from nipype.interfaces.base import Directory
 from nipype.interfaces.base import File
 from nipype.interfaces.base import TraitedSpec
 from nipype.interfaces.base import traits
+from nipype.interfaces.base import isdefined
+import os
+
 
 
 class MidefaceInputSpec(CommandLineInputSpec):
@@ -145,12 +148,30 @@ class MidefaceInputSpec(CommandLineInputSpec):
 class MidefaceOutputSpec(TraitedSpec):
     out_file = File(desc="Defaced input", exists=True)
     out_facemask = File(desc="Facemask", exists=True)
+    out_before_pic = File(desc="before pic", exists=True)
+    out_after_pic = File(desc="after pic", exists=True)
 
 
 class Mideface(CommandLine):
     _cmd = "mideface"
     input_spec = MidefaceInputSpec
     output_spec = MidefaceOutputSpec
+
+    # def _list_outputs(self):
+    #     outputs = self.output_spec().get()
+    #     pics = self.inputs.pics
+    #     if isdefined(self.inputs.odir) and isdefined(self.inputs.pics) and isdefined(self.inputs.code_name):
+    #         if pics is True:
+    #             out_before_pic = f"{self.inputs.odir}/{self.inputs.code_name}.face-before.png"
+    #             out_after_pic = f"{self.inputs.odir}/{self.inputs.code_name}.face-after.png"
+    #             outputs["out_before_pic"] = os.path.abspath(out_before_pic)
+    #             outputs["out_after_pic"] = os.path.abspath(out_after_pic)
+    #     if isdefined(self.inputs.out_file):
+    #         outputs["out_file"] = os.path.abspath(self.inputs.out_file)
+    #     if isdefined(self.inputs.out_facemask):
+    #         outputs["out_facemask"] = os.path.abspath(self.inputs.out_facemask)
+    #     return outputs
+
 
 
 class ApplyMidefaceInputSpec(CommandLineInputSpec):
