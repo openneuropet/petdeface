@@ -256,6 +256,9 @@ def init_single_subject_wf(
         name="sink",
     )
 
+    datasink.inputs.substitutions = [(".face-after", "_desc-faceafter_T1w"),
+                                     ('.face-before', '_desc-facebefore_T1w')]
+
     # deface t1w(s)
     # an MRI might get matched with multiple PET scans, but we need to run
     # deface only once per MRI. This MRI file is the value for each entry in the output of
@@ -274,7 +277,7 @@ def init_single_subject_wf(
 
         t1w_wf = Workflow(name=workflow_name)
         deface_t1w = Node(
-            Mideface(in_file=pathlib.Path(t1w_file)),
+            Mideface(in_file=pathlib.Path(t1w_file), pics=True, odir=".", code=f"{anat_string}"),
             name=f"deface_t1w_{anat_string}",
         )
         t1w_wf.connect(
@@ -288,6 +291,8 @@ def init_single_subject_wf(
                             "out_facemask",
                             f"{anat_string.replace('_', '.')}.anat.@defacemask",
                         ),
+                        ("out_before_pic", f"{anat_string.replace('_', '.')}.anat.@before"),
+                        ("out_after_pic", f"{anat_string.replace('_', '.')}.anat.@after"),
                     ],
                 ),
             ]
@@ -472,7 +477,7 @@ def wrap_up_defacing(
         # we also want to carry over the defacing masks and registration files
         masks_and_reg = list(
             set(
-                layout.get(extension=["mgz", "lta"])
+                layout.get(extension=["mgz", "lta", "png"])
                 + layout.get(suffix="defacemask", extension=["nii.gz", "nii", "mgz"])
             )
         )
