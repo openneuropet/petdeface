@@ -477,7 +477,7 @@ def wrap_up_defacing(
         # we also want to carry over the defacing masks and registration files
         masks_and_reg = list(
             set(
-                layout.get(extension=["mgz", "lta"])
+                layout.get(extension=["mgz", "lta", "png"])
                 + layout.get(suffix="defacemask", extension=["nii.gz", "nii", "mgz"])
             )
         )
