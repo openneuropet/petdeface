@@ -24,15 +24,32 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libglib2.0-0 \
     libxft2 \
     libxrender1 \
-    libxt6
+    libxt6 \
+    ffmpeg \
+    libsm6
 
 # Install Freesurfer
 ENV FREESURFER_HOME="/opt/freesurfer" \
     PATH="/opt/freesurfer/bin:$PATH" \
     FREESURFER_VERSION=7.4.1
 
-RUN curl -L --progress-bar https://surfer.nmr.mgh.harvard.edu/pub/dist/freesurfer/${FREESURFER_VERSION}/freesurfer-linux-centos7_x86_64-${FREESURFER_VERSION}.tar.gz | tar xzC /opt && \
-    echo ". /opt/freesurfer/SetUpFreeSurfer.sh" >> ~/.bashrc
+# copy over local freesurfer binaries
+RUN mkdir /freesurfer_binaries
+COPY freesurfer_binaries/freesurfer-linux-centos7_x86_64-${FREESURFER_VERSION}.tar.gz /freesurfer_binaries/
+
+ARG USE_LOCAL_FREESURFER
+RUN echo USE_LOCAL_FREESURFER=${USE_LOCAL_FREESURFER}
+
+RUN if [ "$USE_LOCAL_FREESURFER" = "True" ]; then \
+      echo "Using local freesurfer binaries."; \
+      tar xzC /opt -f /freesurfer_binaries/freesurfer-linux-centos7_x86_64-${FREESURFER_VERSION}.tar.gz && \
+      echo ". /opt/freesurfer/SetUpFreeSurfer.sh" >> ~/.bashrc; \
+    fi && \
+    if [ "$USE_LOCAL_FREESURFER" = "False" ]; then \
+      echo "Using freesurfer binaries from surfer.nmr.mgh.harvard.edu."; \
+      curl -L --progress-bar https://surfer.nmr.mgh.harvard.edu/pub/dist/freesurfer/${FREESURFER_VERSION}/freesurfer-linux-centos7_x86_64-${FREESURFER_VERSION}.tar.gz | tar xzC /opt && \
+      echo ". /opt/freesurfer/SetUpFreeSurfer.sh" >> ~/.bashrc; \
+    fi
 
 # set bash as default terminal
 SHELL ["/bin/bash", "-ce"]

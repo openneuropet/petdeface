@@ -173,7 +173,7 @@ def deface(args: Union[dict, argparse.Namespace]) -> None:
         )
 
     # clean up and create derivatives directories
-    if args.output_dir is None:
+    if args.output_dir == "None" or args.output_dir is None:
         output_dir = os.path.join(args.bids_dir, "derivatives", "petdeface")
     else:
         output_dir = args.output_dir
@@ -276,8 +276,15 @@ def init_single_subject_wf(
         workflow_name = f"t1w_{anat_string}_wf"
 
         t1w_wf = Workflow(name=workflow_name)
+
+        # create preview pics
+        if determine_in_docker():
+            preview_pics = False
+        else:
+            preview_pics = True
+
         deface_t1w = Node(
-            Mideface(in_file=pathlib.Path(t1w_file), pics=True, odir=".", code=f"{anat_string}"),
+            Mideface(in_file=pathlib.Path(t1w_file), pics=preview_pics, odir=".", code=f"{anat_string}"),
             name=f"deface_t1w_{anat_string}",
         )
         t1w_wf.connect(
@@ -732,6 +739,10 @@ def main():  # noqa: max-complexity: 12
 
         input_mount_point = str(args.input_dir)
         output_mount_point = str(args.output_dir)
+
+        if output_mount_point == "None" or output_mount_point is None:
+            output_mount_point = str(args.input_dir / "derivatives" / "petdeface")
+
         args.input_dir = pathlib.Path("/input")
         args.output_dir = pathlib.Path("/output")
         print(

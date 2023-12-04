@@ -17,3 +17,15 @@ testall: testlayouts
 # install python dependencies
 pythondeps:
 	pip install --upgrade pip && pip install  -e .
+
+# create petdafec docker image with tag (petdeface:X.X.X) from toml file by using cat and grep to 
+# extract the project name from the pyproject.toml file
+
+
+USE_LOCAL_FREESURFER ?= False
+dockerbuild:
+	docker build --build-arg="USE_LOCAL_FREESURFER=$(USE_LOCAL_FREESURFER)" -t $(shell cat pyproject.toml | grep name | cut -d '"' -f 2):$(shell cat pyproject.toml | grep version | head -n 1 | cut -d '"' -f 2) .
+	docker build --build-arg="USE_LOCAL_FREESURFER=$(USE_LOCAL_FREESURFER)" -t $(shell cat pyproject.toml | grep name | cut -d '"' -f 2):latest .
+
+dockerbuildlatest:
+	docker build --build-arg="USE_LOCAL_FREESURFER=$(USE_LOCAL_FREESURFER)" -t $(shell cat pyproject.toml | grep name | cut -d '"' -f 2):latest .
