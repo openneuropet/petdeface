@@ -35,3 +35,4 @@ integration_testing.sh
 petdeface/Dockerfile
 petdeface/README.md
 petdeface/pyproject.toml
+freesurfer_binaries/*
