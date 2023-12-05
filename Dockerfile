@@ -56,13 +56,8 @@ RUN rm -rf /freesurfer_binaries
 # set bash as default terminal
 SHELL ["/bin/bash", "-ce"]
 
-
-ARG uid
-ARG gid
 # create directories for mounting input, output and project volumes
-RUN mkdir -p /input /output /petdeface && \ 
-    if [[ uid && gid ]] chown -R ${uid}:${gid} /input /output /petdeface
-
+RUN mkdir -p /input /output /petdeface 
 
 ENV PATH="/root/.local/bin:$PATH"
 # setup fs env
@@ -86,11 +81,24 @@ ENV PATH=/opt/freesurfer/bin:/opt/freesurfer/fsfast/bin:/opt/freesurfer/tktools:
     PERL5LIB=/opt/freesurfer/mni/share/perl5
 
 # copy the project
-COPY . /petdeface
+#COPY . /petdeface
+COPY pyproject.toml /petdeface/pyproject.toml
+COPY README.md /petdeface/README.md
+COPY petdeface/ /petdeface/petdeface/
 
 # install dependencies
 RUN pip3 install --upgrade pip && cd /petdeface && pip3 install -e .
 
+# do a bunch of folder creation before we're not root
+RUN mkdir -p /.local/bin && \
+    mkdir -p /.cache && \
+    mkdir -p /.config/matplotlib && \
+    chmod -R 777 /.config && \
+    chmod -R 777 /output/ && \
+    chmod -R 777 /.cache/ && \
+    chmod -R 777 /.local/ 
+
+COPY docker_deface.sh /petdeface/docker_deface.sh
 # set the entrypoint to the main executable petdeface.py
 # we don't run petdeface.py directly because we need to set up the ownership of the output files
 # so we run a wrapper script that sets up the launches petdeface.py and sets the ownership of the output files

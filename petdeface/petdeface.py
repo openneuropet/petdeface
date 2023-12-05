@@ -738,11 +738,23 @@ def main():  # noqa: max-complexity: 12
         check_docker_installed()
         check_docker_image_exists("petdeface", build=False)
 
+        # add string to docker command that collects local user id and gid, then runs the docker command as the local user
+        # this is necessary to avoid permission issues when writing files to the output directory
+        uid = os.geteuid()
+        gid = os.getegid()
+        system_platform = system()
+        
+        
         input_mount_point = str(args.input_dir)
         output_mount_point = str(args.output_dir)
 
         if output_mount_point == "None" or output_mount_point is None:
             output_mount_point = str(args.input_dir / "derivatives" / "petdeface")
+        
+        # create output directory if it doesn't exist
+        if not pathlib.Path(output_mount_point).exists():
+            pathlib.Path(output_mount_point).mkdir(parents=True, exist_ok=True)
+        subprocess.run(f"chown -R {uid}:{gid} {str(output_mount_point)}", shell=True)
 
         args.input_dir = pathlib.Path("/input")
         args.output_dir = pathlib.Path("/output")
@@ -775,8 +787,12 @@ def main():  # noqa: max-complexity: 12
         args_string = args_string.replace("--input_dir", "")
 
         # invoke docker run command to run petdeface in container, while redirecting stdout and stderr to terminal
-        docker_command = (
-            f"docker run "
+        docker_command = f"docker run "
+        
+        if system_platform == "Linux":
+            docker_command += f"--user={uid}:{gid} "
+
+        docker_command += (
             f"-a stderr -a stdout --rm "
             f"-v {input_mount_point}:{args.input_dir} "
             f"-v {output_mount_point}:{args.output_dir} "
@@ -795,12 +811,8 @@ def main():  # noqa: max-complexity: 12
 
         docker_command += f"petdeface:latest " f"{args_string}"
 
-        # add string to docker command that collects local user id and gid, then runs the docker command as the local user
-        # this is necessary to avoid permission issues when writing files to the output directory
-        uid = os.geteuid()
-        gid = os.getegid()
-        system_platform = system()
-        docker_command += f" uid={uid} gid={gid} system_platform={system_platform}"
+        docker_command += f" --user={uid}:{gid}"
+        docker_command += f" system_platform={system_platform}"
 
         print("Running docker command: \n{}".format(docker_command))
 
