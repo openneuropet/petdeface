@@ -7,6 +7,7 @@ import sys
 import shutil
 from bids import BIDSLayout
 import glob
+from platform import system
 
 # import shutil
 import subprocess
@@ -775,7 +776,8 @@ def main():  # noqa: max-complexity: 12
 
         # invoke docker run command to run petdeface in container, while redirecting stdout and stderr to terminal
         docker_command = (
-            f"docker run -a stderr -a stdout --rm "
+            f"docker run "
+            f"-a stderr -a stdout --rm "
             f"-v {input_mount_point}:{args.input_dir} "
             f"-v {output_mount_point}:{args.output_dir} "
         )
@@ -792,6 +794,13 @@ def main():  # noqa: max-complexity: 12
         docker_command += "--platform linux/amd64 "
 
         docker_command += f"petdeface:latest " f"{args_string}"
+
+        # add string to docker command that collects local user id and gid, then runs the docker command as the local user
+        # this is necessary to avoid permission issues when writing files to the output directory
+        uid = os.geteuid()
+        gid = os.getegid()
+        system_platform = system()
+        docker_command += f" uid={uid} gid={gid} system_platform={system_platform}"
 
         print("Running docker command: \n{}".format(docker_command))
 

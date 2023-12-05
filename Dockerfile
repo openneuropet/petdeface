@@ -51,11 +51,18 @@ RUN if [ "$USE_LOCAL_FREESURFER" = "True" ]; then \
       echo ". /opt/freesurfer/SetUpFreeSurfer.sh" >> ~/.bashrc; \
     fi
 
+RUN rm -rf /freesurfer_binaries
+
 # set bash as default terminal
 SHELL ["/bin/bash", "-ce"]
 
+
+ARG uid
+ARG gid
 # create directories for mounting input, output and project volumes
-RUN mkdir -p /input /output /petdeface
+RUN mkdir -p /input /output /petdeface && \ 
+    if [[ uid && gid ]] chown -R ${uid}:${gid} /input /output /petdeface
+
 
 ENV PATH="/root/.local/bin:$PATH"
 # setup fs env
@@ -85,4 +92,7 @@ COPY . /petdeface
 RUN pip3 install --upgrade pip && cd /petdeface && pip3 install -e .
 
 # set the entrypoint to the main executable petdeface.py
-ENTRYPOINT ["python3", "/petdeface/petdeface/petdeface.py"]
+# we don't run petdeface.py directly because we need to set up the ownership of the output files
+# so we run a wrapper script that sets up the launches petdeface.py and sets the ownership of the output files
+# on successful exit or on failure using trap.
+ENTRYPOINT ["bash", "/petdeface/docker_deface.sh", "python3", "/petdeface/petdeface/petdeface.py"]
