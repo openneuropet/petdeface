@@ -8,7 +8,6 @@ from nipype.interfaces.base import isdefined
 import os
 
 
-
 class MidefaceInputSpec(CommandLineInputSpec):
     in_file = File(desc="Volume to deface", exists=True, argstr="--i %s")
     out_file = File(
@@ -157,7 +156,6 @@ class Mideface(CommandLine):
     input_spec = MidefaceInputSpec
     output_spec = MidefaceOutputSpec
 
-
     def _list_outputs(self):
         metadata = dict(name_source=lambda t: t is not None)
         traits = self.inputs.traits(**metadata)
@@ -170,9 +168,17 @@ class Mideface(CommandLine):
                 fname = self._filename_from_source(name)
                 if isdefined(fname):
                     outputs[out_name] = os.path.abspath(fname)
-            if self.inputs.pics is True and self.inputs.odir is not None and self.inputs.code is not None:
-                outputs["out_before_pic"] = os.path.abspath(f"{self.inputs.odir}/{self.inputs.code}.face-before.png")
-                outputs["out_after_pic"] = os.path.abspath(f"{self.inputs.odir}/{self.inputs.code}.face-after.png")
+            if (
+                self.inputs.pics is True
+                and self.inputs.odir is not None
+                and self.inputs.code is not None
+            ):
+                outputs["out_before_pic"] = os.path.abspath(
+                    f"{self.inputs.odir}/{self.inputs.code}.face-before.png"
+                )
+                outputs["out_after_pic"] = os.path.abspath(
+                    f"{self.inputs.odir}/{self.inputs.code}.face-after.png"
+                )
             return outputs
 
 
