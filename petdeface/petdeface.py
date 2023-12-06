@@ -257,8 +257,10 @@ def init_single_subject_wf(
         name="sink",
     )
 
-    datasink.inputs.substitutions = [(".face-after", "_desc-faceafter_T1w"),
-                                     ('.face-before', '_desc-facebefore_T1w')]
+    datasink.inputs.substitutions = [
+        (".face-after", "_desc-faceafter_T1w"),
+        (".face-before", "_desc-facebefore_T1w"),
+    ]
 
     # deface t1w(s)
     # an MRI might get matched with multiple PET scans, but we need to run
@@ -285,7 +287,12 @@ def init_single_subject_wf(
             preview_pics = True
 
         deface_t1w = Node(
-            Mideface(in_file=pathlib.Path(t1w_file), pics=preview_pics, odir=".", code=f"{anat_string}"),
+            Mideface(
+                in_file=pathlib.Path(t1w_file),
+                pics=preview_pics,
+                odir=".",
+                code=f"{anat_string}",
+            ),
             name=f"deface_t1w_{anat_string}",
         )
         t1w_wf.connect(
@@ -299,8 +306,14 @@ def init_single_subject_wf(
                             "out_facemask",
                             f"{anat_string.replace('_', '.')}.anat.@defacemask",
                         ),
-                        ("out_before_pic", f"{anat_string.replace('_', '.')}.anat.@before"),
-                        ("out_after_pic", f"{anat_string.replace('_', '.')}.anat.@after"),
+                        (
+                            "out_before_pic",
+                            f"{anat_string.replace('_', '.')}.anat.@before",
+                        ),
+                        (
+                            "out_after_pic",
+                            f"{anat_string.replace('_', '.')}.anat.@after",
+                        ),
                     ],
                 ),
             ]
@@ -743,14 +756,13 @@ def main():  # noqa: max-complexity: 12
         uid = os.geteuid()
         gid = os.getegid()
         system_platform = system()
-        
-        
+
         input_mount_point = str(args.input_dir)
         output_mount_point = str(args.output_dir)
 
         if output_mount_point == "None" or output_mount_point is None:
             output_mount_point = str(args.input_dir / "derivatives" / "petdeface")
-        
+
         # create output directory if it doesn't exist
         if not pathlib.Path(output_mount_point).exists():
             pathlib.Path(output_mount_point).mkdir(parents=True, exist_ok=True)
@@ -788,7 +800,7 @@ def main():  # noqa: max-complexity: 12
 
         # invoke docker run command to run petdeface in container, while redirecting stdout and stderr to terminal
         docker_command = f"docker run "
-        
+
         if system_platform == "Linux":
             docker_command += f"--user={uid}:{gid} "
 
