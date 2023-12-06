@@ -22,8 +22,8 @@ own_files()
     else
         echo "petdeface container main process exited with code $?."
         echo "Changing ownership of files at /output directory to UID: $uid and GID: $gid"
-        echo chown $uid:$gid /output/
-        echo chown -R $uid:$gid /output
+        chown $uid:$gid /output/
+        chown -R $uid:$gid /output
     fi
 
 }
