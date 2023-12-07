@@ -7,6 +7,7 @@ import sys
 import shutil
 from bids import BIDSLayout
 import glob
+from platform import system
 
 # import shutil
 import subprocess
@@ -173,7 +174,7 @@ def deface(args: Union[dict, argparse.Namespace]) -> None:
         )
 
     # clean up and create derivatives directories
-    if args.output_dir is None:
+    if args.output_dir == "None" or args.output_dir is None:
         output_dir = os.path.join(args.bids_dir, "derivatives", "petdeface")
     else:
         output_dir = args.output_dir
@@ -256,8 +257,10 @@ def init_single_subject_wf(
         name="sink",
     )
 
-    datasink.inputs.substitutions = [(".face-after", "_desc-faceafter_T1w"),
-                                     ('.face-before', '_desc-facebefore_T1w')]
+    datasink.inputs.substitutions = [
+        (".face-after", "_desc-faceafter_T1w"),
+        (".face-before", "_desc-facebefore_T1w"),
+    ]
 
     # deface t1w(s)
     # an MRI might get matched with multiple PET scans, but we need to run
@@ -276,8 +279,20 @@ def init_single_subject_wf(
         workflow_name = f"t1w_{anat_string}_wf"
 
         t1w_wf = Workflow(name=workflow_name)
+
+        # create preview pics
+        if determine_in_docker():
+            preview_pics = False
+        else:
+            preview_pics = True
+
         deface_t1w = Node(
-            Mideface(in_file=pathlib.Path(t1w_file), pics=True, odir=".", code=f"{anat_string}"),
+            Mideface(
+                in_file=pathlib.Path(t1w_file),
+                pics=preview_pics,
+                odir=".",
+                code=f"{anat_string}",
+            ),
             name=f"deface_t1w_{anat_string}",
         )
         t1w_wf.connect(
@@ -291,8 +306,14 @@ def init_single_subject_wf(
                             "out_facemask",
                             f"{anat_string.replace('_', '.')}.anat.@defacemask",
                         ),
-                        ("out_before_pic", f"{anat_string.replace('_', '.')}.anat.@before"),
-                        ("out_after_pic", f"{anat_string.replace('_', '.')}.anat.@after"),
+                        (
+                            "out_before_pic",
+                            f"{anat_string.replace('_', '.')}.anat.@before",
+                        ),
+                        (
+                            "out_after_pic",
+                            f"{anat_string.replace('_', '.')}.anat.@after",
+                        ),
                     ],
                 ),
             ]
@@ -730,8 +751,23 @@ def main():  # noqa: max-complexity: 12
         check_docker_installed()
         check_docker_image_exists("petdeface", build=False)
 
+        # add string to docker command that collects local user id and gid, then runs the docker command as the local user
+        # this is necessary to avoid permission issues when writing files to the output directory
+        uid = os.geteuid()
+        gid = os.getegid()
+        system_platform = system()
+
         input_mount_point = str(args.input_dir)
         output_mount_point = str(args.output_dir)
+
+        if output_mount_point == "None" or output_mount_point is None:
+            output_mount_point = str(args.input_dir / "derivatives" / "petdeface")
+
+        # create output directory if it doesn't exist
+        if not pathlib.Path(output_mount_point).exists():
+            pathlib.Path(output_mount_point).mkdir(parents=True, exist_ok=True)
+        subprocess.run(f"chown -R {uid}:{gid} {str(output_mount_point)}", shell=True)
+
         args.input_dir = pathlib.Path("/input")
         args.output_dir = pathlib.Path("/output")
         print(
@@ -763,8 +799,13 @@ def main():  # noqa: max-complexity: 12
         args_string = args_string.replace("--input_dir", "")
 
         # invoke docker run command to run petdeface in container, while redirecting stdout and stderr to terminal
-        docker_command = (
-            f"docker run -a stderr -a stdout --rm "
+        docker_command = f"docker run "
+
+        if system_platform == "Linux":
+            docker_command += f"--user={uid}:{gid} "
+
+        docker_command += (
+            f"-a stderr -a stdout --rm "
             f"-v {input_mount_point}:{args.input_dir} "
             f"-v {output_mount_point}:{args.output_dir} "
         )
@@ -781,6 +822,9 @@ def main():  # noqa: max-complexity: 12
         docker_command += "--platform linux/amd64 "
 
         docker_command += f"petdeface:latest " f"{args_string}"
+
+        docker_command += f" --user={uid}:{gid}"
+        docker_command += f" system_platform={system_platform}"
 
         print("Running docker command: \n{}".format(docker_command))
 
