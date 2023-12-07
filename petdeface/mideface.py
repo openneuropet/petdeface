@@ -9,6 +9,12 @@ import os
 
 
 class MidefaceInputSpec(CommandLineInputSpec):
+    """
+    _summary_
+
+    :param CommandLineInputSpec: _description_
+    :type CommandLineInputSpec: _type_
+    """
     in_file = File(desc="Volume to deface", exists=True, argstr="--i %s")
     out_file = File(
         desc="Defaced input",
@@ -145,6 +151,12 @@ class MidefaceInputSpec(CommandLineInputSpec):
 
 
 class MidefaceOutputSpec(TraitedSpec):
+    """
+    _summary_
+
+    :param TraitedSpec: _description_
+    :type TraitedSpec: _type_
+    """
     out_file = File(desc="Defaced input", exists=True)
     out_facemask = File(desc="Facemask", exists=True)
     out_before_pic = File(desc="before pic", exists=True)
@@ -152,11 +164,25 @@ class MidefaceOutputSpec(TraitedSpec):
 
 
 class Mideface(CommandLine):
+    """
+    _summary_
+
+    :param CommandLine: _description_
+    :type CommandLine: _type_
+    :return: _description_
+    :rtype: _type_
+    """
     _cmd = "mideface"
     input_spec = MidefaceInputSpec
     output_spec = MidefaceOutputSpec
 
     def _list_outputs(self):
+        """
+        _summary_
+
+        :return: _description_
+        :rtype: _type_
+        """
         metadata = dict(name_source=lambda t: t is not None)
         traits = self.inputs.traits(**metadata)
         if traits:
@@ -183,6 +209,12 @@ class Mideface(CommandLine):
 
 
 class ApplyMidefaceInputSpec(CommandLineInputSpec):
+    """
+    _summary_
+
+    :param CommandLineInputSpec: _description_
+    :type CommandLineInputSpec: _type_
+    """
     in_file = File(
         desc="Volume to deface",
         exists=True,
@@ -216,6 +248,12 @@ class ApplyMidefaceOutputSpec(TraitedSpec):
 
 
 class ApplyMideface(CommandLine):
+    """
+    _summary_
+
+    :param CommandLine: _description_
+    :type CommandLine: _type_
+    """
     _cmd = "mideface --apply"
     input_spec = ApplyMidefaceInputSpec
     output_spec = ApplyMidefaceOutputSpec
