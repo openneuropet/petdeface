@@ -17,7 +17,7 @@ author = 'Martin Nørgaard, Anthony Galassi, Murat Bilgel'
 import pathlib
 import os
 import sys
-python_project_path = pathlib.Path(os.path.abspath('../petdeface'))
+python_project_path = pathlib.Path(os.path.abspath('../petdeface/petdeface'))
 sys.path.insert(0, str(python_project_path))
 
 

@@ -7,9 +7,11 @@ Welcome to petdeface's documentation!
 =====================================
 
 .. toctree::
+   installation
+   modules
+   usage
    :maxdepth: 2
    :caption: Contents:
-
 
 
 Indices and tables
