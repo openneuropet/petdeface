@@ -15,6 +15,7 @@ class MidefaceInputSpec(CommandLineInputSpec):
     :param CommandLineInputSpec: _description_
     :type CommandLineInputSpec: _type_
     """
+
     in_file = File(desc="Volume to deface", exists=True, argstr="--i %s")
     out_file = File(
         desc="Defaced input",
@@ -157,6 +158,7 @@ class MidefaceOutputSpec(TraitedSpec):
     :param TraitedSpec: _description_
     :type TraitedSpec: _type_
     """
+
     out_file = File(desc="Defaced input", exists=True)
     out_facemask = File(desc="Facemask", exists=True)
     out_before_pic = File(desc="before pic", exists=True)
@@ -172,6 +174,7 @@ class Mideface(CommandLine):
     :return: _description_
     :rtype: _type_
     """
+
     _cmd = "mideface"
     input_spec = MidefaceInputSpec
     output_spec = MidefaceOutputSpec
@@ -215,6 +218,7 @@ class ApplyMidefaceInputSpec(CommandLineInputSpec):
     :param CommandLineInputSpec: _description_
     :type CommandLineInputSpec: _type_
     """
+
     in_file = File(
         desc="Volume to deface",
         exists=True,
@@ -254,6 +258,7 @@ class ApplyMideface(CommandLine):
     :param CommandLine: _description_
     :type CommandLine: _type_
     """
+
     _cmd = "mideface --apply"
     input_spec = ApplyMidefaceInputSpec
     output_spec = ApplyMidefaceOutputSpec

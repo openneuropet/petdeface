@@ -75,7 +75,7 @@ def locate_freesurfer_license():
     Raises error if $FREESURFER_HOME is not set or if license file does not exist at $FREESURFER_HOME/license.txt
 
     :raises ValueError: if FREESURFER_HOME environment variable is not set
-    :raises ValueError: if license file does not exist at FREESURFER_HOME/license.txt 
+    :raises ValueError: if license file does not exist at FREESURFER_HOME/license.txt
     :return: full path to Freesurfer license file
     :rtype: pathlib.Path
     """
@@ -492,9 +492,9 @@ def wrap_up_defacing(
     creates a copy of the original dataset at {path_to_dataset}_defaced and places the defaced images there
     along with the defacing masks and registration files at the copied dir in the deriviatives folder, or lastly
     leaves things well enough alone and just places the defaced images in the derivatives folder (does nothing).
-    
+
     path_to_dataset : path like object (str or pathlib.Path)
-        
+
     output_dir : path like object (str or pathib.Path), optional
         Specific directory to place output, this seems redundant given placemnent, by default None
     placement : str, optional
@@ -506,7 +506,7 @@ def wrap_up_defacing(
 
     :param path_to_dataset: Path to original dataset
     :type path_to_dataset: path like object (str or pathlib.Path)
-    :param output_dir: Specific directory to place output, arguably redundant given placemnent, defaults to 
+    :param output_dir: Specific directory to place output, arguably redundant given placemnent, defaults to
         input_dir/derivatives/petdeface
     :type output_dir: path like object (str or pathlib.Path), optional
     :param placement:  str, optional
@@ -682,6 +682,7 @@ class PetDeface:
     """
     _summary_
     """
+
     def __init__(
         self,
         bids_dir,
@@ -738,7 +739,7 @@ class PetDeface:
 def cli():
     """
     _summary_
-    """ 
+    """
     parser = argparse.ArgumentParser(description="PetDeface")
 
     parser.add_argument(
