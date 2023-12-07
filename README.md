@@ -24,6 +24,8 @@ This software can be installed via source or via pip from PyPi with `pip install
 *for a full list of dependencies see the pyproject.toml in this repo*
 
 ## Usage
+**_NOTE:_** This project is currently in beta release, some features listed below may not be available for version numbers < 1.0.0
+
 ```bash
 usage: petdeface.py [-h] [--output_dir OUTPUT_DIR] [--anat_only]
        [--subject SUBJECT] [--session SESSION] [--docker]
@@ -47,7 +49,7 @@ options:
   --docker, -d          Run in docker container
   --n_procs N_PROCS     Number of processors to use when running the workflow
   --skip_bids_validator
-  --version, -v         show program's version number and exit
+  --version, -v         show programs version number and exit
   --placement PLACEMENT, -p PLACEMENT
                         Where to place the defaced images. Options are
                         'adjacent': next to the input_dir (default) in a folder appended with _defaced
@@ -56,6 +58,47 @@ options:
                         'derivatives': does all of the defacing within the derivatives folder in input_dir.
   --remove_existing, -r Remove existing output files in output_dir.
 ```
+
+Working example usage:
+
+```bash
+petdeface /inputfolder --output_dir /outputfolder --n_procs 16 --skip_bids_validator --placement adjacent
+```
+
+### Docker Usage
+
+Requirements:
+- Docker must be installed and access to `docker run` must be available to the current user
+- `openneuropet/petdeface` must be present or reachable at dockerhub from the machine the cli is installed at, e.g. `docker pull openneuropet/petdeface` must work
+- if one is unable to pull the image on can build locally with `make dockerbuild`
+
+**_NOTE:_** The docker image for petdeface is not intended to be used by itself, but instead accessed via the `petdeface` command line written in Python.
+
+Appending the `--docker` after including all of the required arguments for petdeface will 
+automatically launch the dockerized version of this application, no additional input after
+that is required.
+
+**Running directly with Docker, no Python, no installation:**
+
+If you run without using the CLI you will need to:
+- bind the input and output volumes to the container
+- bind a freesurfer license to the container at `/opt/freesurfer/license.txt`
+- provide all of the arguments you would normally need to provide to the Python CLI
+- provide $UID and $GID if running on linux so that your output isn't written as root, you may disregard this if you're handy.
+
+An example of the command generated from the Python cli to run the docker based version can
+be seen below:
+
+```bash
+docker run --user=$UID:$GID -a stderr -a stdout --rm \
+-v /Data/faced_pet_data/:/input \
+-v /home/galassiae/Data/defaced_pet_data/:/output \
+-v /home/user/freesurfer/license.txt:/opt/freesurfer/license.txt \
+--platform linux/amd64 \
+petdeface:latest  /input --output_dir /output --n_procs 16 --skip_bids_validator  --placement adjacent --user=$UID:$GID system_platform=Linux
+```
+
+
 
 ## Development
 
