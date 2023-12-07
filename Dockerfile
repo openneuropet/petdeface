@@ -24,21 +24,40 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libglib2.0-0 \
     libxft2 \
     libxrender1 \
-    libxt6
+    libxt6 \
+    ffmpeg \
+    libsm6
 
 # Install Freesurfer
 ENV FREESURFER_HOME="/opt/freesurfer" \
     PATH="/opt/freesurfer/bin:$PATH" \
     FREESURFER_VERSION=7.4.1
 
-RUN curl -L --progress-bar https://surfer.nmr.mgh.harvard.edu/pub/dist/freesurfer/${FREESURFER_VERSION}/freesurfer-linux-centos7_x86_64-${FREESURFER_VERSION}.tar.gz | tar xzC /opt && \
-    echo ". /opt/freesurfer/SetUpFreeSurfer.sh" >> ~/.bashrc
+# copy over local freesurfer binaries
+RUN mkdir /freesurfer_binaries
+COPY freesurfer_binaries/freesurfer-linux-centos7_x86_64-${FREESURFER_VERSION}.tar.gz /freesurfer_binaries/
+
+ARG USE_LOCAL_FREESURFER
+RUN echo USE_LOCAL_FREESURFER=${USE_LOCAL_FREESURFER}
+
+RUN if [ "$USE_LOCAL_FREESURFER" = "True" ]; then \
+      echo "Using local freesurfer binaries."; \
+      tar xzC /opt -f /freesurfer_binaries/freesurfer-linux-centos7_x86_64-${FREESURFER_VERSION}.tar.gz && \
+      echo ". /opt/freesurfer/SetUpFreeSurfer.sh" >> ~/.bashrc; \
+    fi && \
+    if [ "$USE_LOCAL_FREESURFER" = "False" ]; then \
+      echo "Using freesurfer binaries from surfer.nmr.mgh.harvard.edu."; \
+      curl -L --progress-bar https://surfer.nmr.mgh.harvard.edu/pub/dist/freesurfer/${FREESURFER_VERSION}/freesurfer-linux-centos7_x86_64-${FREESURFER_VERSION}.tar.gz | tar xzC /opt && \
+      echo ". /opt/freesurfer/SetUpFreeSurfer.sh" >> ~/.bashrc; \
+    fi
+
+RUN rm -rf /freesurfer_binaries
 
 # set bash as default terminal
 SHELL ["/bin/bash", "-ce"]
 
 # create directories for mounting input, output and project volumes
-RUN mkdir -p /input /output /petdeface
+RUN mkdir -p /input /output /petdeface 
 
 ENV PATH="/root/.local/bin:$PATH"
 # setup fs env
@@ -62,10 +81,26 @@ ENV PATH=/opt/freesurfer/bin:/opt/freesurfer/fsfast/bin:/opt/freesurfer/tktools:
     PERL5LIB=/opt/freesurfer/mni/share/perl5
 
 # copy the project
-COPY . /petdeface
+#COPY . /petdeface
+COPY pyproject.toml /petdeface/pyproject.toml
+COPY README.md /petdeface/README.md
+COPY petdeface/ /petdeface/petdeface/
 
 # install dependencies
 RUN pip3 install --upgrade pip && cd /petdeface && pip3 install -e .
 
+# do a bunch of folder creation before we're not root
+RUN mkdir -p /.local/bin && \
+    mkdir -p /.cache && \
+    mkdir -p /.config/matplotlib && \
+    chmod -R 777 /.config && \
+    chmod -R 777 /output/ && \
+    chmod -R 777 /.cache/ && \
+    chmod -R 777 /.local/ 
+
+COPY docker_deface.sh /petdeface/docker_deface.sh
 # set the entrypoint to the main executable petdeface.py
-ENTRYPOINT ["python3", "/petdeface/petdeface/petdeface.py"]
+# we don't run petdeface.py directly because we need to set up the ownership of the output files
+# so we run a wrapper script that sets up the launches petdeface.py and sets the ownership of the output files
+# on successful exit or on failure using trap.
+ENTRYPOINT ["bash", "/petdeface/docker_deface.sh", "python3", "/petdeface/petdeface/petdeface.py"]
