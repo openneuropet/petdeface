@@ -92,13 +92,11 @@ be seen below:
 ```bash
 docker run --user=$UID:$GID -a stderr -a stdout --rm \
 -v /Data/faced_pet_data/:/input \
--v /home/galassiae/Data/defaced_pet_data/:/output \
--v /home/user/freesurfer/license.txt:/opt/freesurfer/license.txt \
+-v /Data/defaced_pet_data/:/output \
+-v /home/freesurfer/license.txt:/opt/freesurfer/license.txt \
 --platform linux/amd64 \
 petdeface:latest  /input --output_dir /output --n_procs 16 --skip_bids_validator  --placement adjacent --user=$UID:$GID system_platform=Linux
 ```
-
-
 
 ## Development
 
