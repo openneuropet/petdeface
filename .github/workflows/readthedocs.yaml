@@ -1,6 +1,7 @@
-name: petdeface
+name: readthedocs/actions
 on:
-  pull_request:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
   workflow_dispatch:
     inputs:
       debug_enabled:
@@ -9,17 +10,13 @@ on:
         required: false
         default: false
 
+permissions:
+  pull-requests: write
+
 jobs:
-  PreviewDocs:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v2
-      - name: Install Poetry
-        run: pipx install poetry
-      - uses: actions/setup-python@v2
-        with:
-          python-version: 3.11
-          cache: poetry
-      - run: poetry install
-      - name: Preview Docs
-        uses: readthedocs/actions/preview@v1
+  pull-request-links:
+  runs-on: ubuntu-latest
+  steps:
+    -uses: readthedocs/actions/preview@v1
+     with:
+      project-slug: "readthedocs-preview"
