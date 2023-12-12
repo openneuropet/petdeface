@@ -20,4 +20,4 @@ jobs:
     - name: Preview RTD
       uses: readthedocs/actions/preview@v1
       with:
-        project-slug: "readthedocs-preview"
+        project-slug: "petdeface"
