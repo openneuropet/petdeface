@@ -1,8 +1,12 @@
 # Quickly run black on all python files in this repository, local version of the pre-commit hook
 black:
-	for file in `find . -name "*.py"`; do \
+	@for file in `find . -name "*.py"`; do \
 		black $$file; \
 	done
+
+lint: black
+	echo "Checking actions too"
+	actionlint .github/workflows/*
 
 testlayoutsverbose:
 	pytest tests/test_dir_layouts.py -s -vv
