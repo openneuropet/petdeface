@@ -70,6 +70,15 @@ for place in places_to_look:
 
 
 def locate_freesurfer_license():
+    """
+    Checks for freesurfer license on host system and returns path to license file if it exists.
+    Raises error if $FREESURFER_HOME is not set or if license file does not exist at $FREESURFER_HOME/license.txt
+
+    :raises ValueError: if FREESURFER_HOME environment variable is not set
+    :raises ValueError: if license file does not exist at FREESURFER_HOME/license.txt
+    :return: full path to Freesurfer license file
+    :rtype: pathlib.Path
+    """
     # collect freesurfer home environment variable
     fs_home = pathlib.Path(os.environ.get("FREESURFER_HOME", ""))
     if not fs_home:
@@ -87,7 +96,13 @@ def locate_freesurfer_license():
 
 
 def check_docker_installed():
-    """Checks to see if docker is installed on the system"""
+    """
+    Checks to see if docker is installed on the host system, raises exception if it is not.
+
+    :raises Exception: if docker is not installed
+    :return: status of docker installation
+    :rtype: bool
+    """
     try:
         subprocess.run(
             ["docker", "--version"],
@@ -102,7 +117,13 @@ def check_docker_installed():
 
 
 def determine_in_docker():
-    """Determines if the script is running in a docker container, returns True if it is, False otherwise"""
+    """
+    Determines if the script is running in a docker container, returns True if it is, False otherwise
+
+
+    :return: if running in docker container
+    :rtype: bool
+    """
     in_docker = False
     # check if /proc/1/cgroup exists
     if pathlib.Path("/proc/1/cgroup").exists():
@@ -123,7 +144,16 @@ def determine_in_docker():
 
 
 def check_docker_image_exists(image_name, build=False):
-    """Checks to see if a docker image exists"""
+    """
+    _summary_
+
+    :param image_name: _description_
+    :type image_name: _type_
+    :param build: _description_, defaults to False
+    :type build: bool, optional
+    :return: _description_
+    :rtype: _type_
+    """
     try:
         subprocess.run(
             ["docker", "inspect", image_name],
@@ -156,7 +186,13 @@ def check_docker_image_exists(image_name, build=False):
 
 
 def deface(args: Union[dict, argparse.Namespace]) -> None:
-    """Main function for the PET Deface workflow."""
+    """
+    Main function for the PET Deface workflow.
+
+    :param args: _description_
+    :type args: Union[dict, argparse.Namespace]
+    :raises Exception: _description_
+    """
 
     if type(args) is dict:
         args = argparse.Namespace(**args)
@@ -204,7 +240,16 @@ def deface(args: Union[dict, argparse.Namespace]) -> None:
 
 
 def count_matching_chars(a: str, b: str) -> int:
-    """Count the number of matching characters up to first discrepancy."""
+    """
+    Count the number of matching characters up to first discrepancy.
+
+    :param a: _description_
+    :type a: str
+    :param b: _description_
+    :type b: str
+    :return: _description_
+    :rtype: int
+    """
     n = min(len(a), len(b))
     result = 0
     for i in range(n):
@@ -220,13 +265,18 @@ def init_single_subject_wf(
     bids_data: [pathlib.Path, BIDSLayout],
     output_dir: pathlib.Path = None,
 ) -> Workflow:
-    """Organize the preprocessing pipeline for a single subject.
+    """
+    Organize the preprocessing pipeline for a single subject.
 
-    Args:
-        subject_id: Subject label for this single-subject workflow.
-
-    Returns:
-        workflow for subject
+    :param subject_id: _description_
+    :type subject_id: str
+    :param bids_data: _description_
+    :type bids_data: pathlib.Path, BIDSLayout]
+    :param output_dir: _description_, defaults to None
+    :type output_dir: pathlib.Path, optional
+    :raises FileNotFoundError: _description_
+    :return: _description_
+    :rtype: Workflow
     """
     name = f"single_subject_{subject_id}_wf"
 
@@ -391,6 +441,14 @@ def init_single_subject_wf(
 
 
 def write_out_dataset_description_json(input_bids_dir, output_bids_dir=None):
+    """
+    _summary_
+
+    :param input_bids_dir: _description_
+    :type input_bids_dir: _type_
+    :param output_bids_dir: _description_, defaults to None
+    :type output_bids_dir: _type_, optional
+    """
     # set output dir to input dir if output dir is not specified
     if output_bids_dir is None:
         output_bids_dir = pathlib.Path(
@@ -434,10 +492,9 @@ def wrap_up_defacing(
     creates a copy of the original dataset at {path_to_dataset}_defaced and places the defaced images there
     along with the defacing masks and registration files at the copied dir in the deriviatives folder, or lastly
     leaves things well enough alone and just places the defaced images in the derivatives folder (does nothing).
-    Parameters
-    ----------
+
     path_to_dataset : path like object (str or pathlib.Path)
-        Path to original dataset
+
     output_dir : path like object (str or pathib.Path), optional
         Specific directory to place output, this seems redundant given placemnent, by default None
     placement : str, optional
@@ -446,6 +503,22 @@ def wrap_up_defacing(
         - inplace replaces original images with defaced versions (not recommended)
         - derivatives does nothing, defaced images exist only within the derivitives/petdeface dir
         by default "adjacent"
+
+    :param path_to_dataset: Path to original dataset
+    :type path_to_dataset: path like object (str or pathlib.Path)
+    :param output_dir: Specific directory to place output, arguably redundant given placemnent, defaults to
+        input_dir/derivatives/petdeface
+    :type output_dir: path like object (str or pathlib.Path), optional
+    :param placement:  str, optional
+        Can be one of three values
+        - adjacent creates (but doesn't overrwrite) a new dataset with only defaced images
+        - inplace replaces original images with defaced versions (not recommended)
+        - derivatives does nothing, defaced images exist only within the derivitives/petdeface dir
+        by default "adjacent"
+    :type placement: str, optional
+    :param remove_existing: _description_, defaults to True
+    :type remove_existing: bool, optional
+    :raises ValueError: _description_
     """
     # get bids layout of dataset
     layout = BIDSLayout(path_to_dataset, derivatives=True)
@@ -558,6 +631,18 @@ def move_defaced_images(
     include_extra_anat: bool = False,
     move_files: bool = False,
 ):
+    """
+    _summary_
+
+    :param mapping_dict: _description_
+    :type mapping_dict: dict
+    :param final_destination: _description_
+    :type final_destination: Union[str, pathlib.Path]
+    :param include_extra_anat: _description_, defaults to False
+    :type include_extra_anat: bool, optional
+    :param move_files: _description_, defaults to False
+    :type move_files: bool, optional
+    """
     # update paths in mapping dict
     for defaced, raw in mapping_dict.items():
         # get common path and replace with final_destination to get new path
@@ -594,6 +679,10 @@ def move_defaced_images(
 
 
 class PetDeface:
+    """
+    _summary_
+    """
+
     def __init__(
         self,
         bids_dir,
@@ -622,6 +711,9 @@ class PetDeface:
             raise ValueError("Freesurfer license is not valid")
 
     def run(self):
+        """
+        _summary_
+        """
         deface(
             {
                 "bids_dir": self.bids_dir,
@@ -645,6 +737,9 @@ class PetDeface:
 
 
 def cli():
+    """
+    _summary_
+    """
     parser = argparse.ArgumentParser(description="PetDeface")
 
     parser.add_argument(
@@ -725,6 +820,9 @@ def cli():
 
 
 def main():  # noqa: max-complexity: 12
+    """
+    _summary_
+    """
     # determine present working directory
     pwd = pathlib.Path.cwd()
 
