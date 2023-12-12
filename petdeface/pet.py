@@ -19,12 +19,25 @@ class WeightedAverageOutputSpec(TraitedSpec):
 
 
 class WeightedAverage(BaseInterface):
-    """Create a time-weighted average of dynamic PET data using mid-frames."""
+    """
+    Create a time-weighted average of dynamic PET data using mid-frames.
+
+    :param BaseInterface: _description_
+    :type BaseInterface: _type_
+    :return: _description_
+    :rtype: _type_
+    """
 
     input_spec = WeightedAverageInputSpec
     output_spec = WeightedAverageOutputSpec
 
     def _run_interface(self, runtime):
+        """
+        _summary_
+
+        :param runtime: _description_
+        :type runtime: _type_
+        """
         pet_file = self.inputs.pet_file
         bids_dir = os.path.dirname(pet_file)
 
@@ -47,6 +60,12 @@ class WeightedAverage(BaseInterface):
         nib.save(nib.Nifti1Image(wavg, img.affine), out_file)
 
     def _list_outputs(self):
+        """
+        _summary_
+
+        :return: _description_
+        :rtype: _type_
+        """
         outputs = self._outputs().get()
         pet_file = self.inputs.pet_file
         _, base, ext = split_filename(pet_file)
