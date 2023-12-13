@@ -123,14 +123,21 @@ Alternatively, if one is unable to install PETdeface from source or PIP, but can
     -v /Data/defaced_pet_data/:/output \
     -v /home/user/freesurfer/license.txt:/opt/freesurfer/license.txt \
     --platform linux/amd64 \
-    petdeface:latest  /input --output_dir /output --n_procs 16 --skip_bids_validator  --placement adjacent --user=$UID:$GID system_platform=Linux
+    petdeface:latest  /input \
+    --output_dir /output \
+    --n_procs 16 \
+    --skip_bids_validator \
+    --placement adjacent \
+    --user=$UID:$GID \
+    system_platform=Linux
 
 One needs to create 3 bind mounts to the docker container when running PETdeface directly from docker:
+
 1. /input needs to mounted to the input BIDS dataset on the host machine
 2. /output needs to be mounted to the output directory on the host machine
 3. /opt/freesurfer/license.txt needs to be mounted to the freesurfer license file on the host machine
 
 If one is running PETdeface on a linux machine and desires non-root execution of the container, 
-the `--user` flag needs to be set to the UID and GID of the user running the container.
+the ``--user`` flag needs to be set to the UID and GID of the user running the container.
 
-Of course all of the above is done automatically when running PETdeface using the `--docker` flag.
+Of course all of the above is done automatically when running PETdeface using the ``--docker`` flag.

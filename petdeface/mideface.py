@@ -10,13 +10,19 @@ import os
 
 class MidefaceInputSpec(CommandLineInputSpec):
     """
-    _summary_
+    Command line arguments for mideface defined as traits for nipype CommandLineInputSpec.
+    Arguments are defined here and where necessary defaulted with string values to make subsequent
+    steps in the pipeline possible. E.g. defaced output files are denoted with the '_defaced' suffix
+    to differentiate them from the original input files.
 
-    :param CommandLineInputSpec: _description_
-    :type CommandLineInputSpec: _type_
+
+    :param CommandLineInputSpec: nipype CommandLineInputSpec
+    :type CommandLineInputSpec: nipype.interfaces.base.CommandLineInputSpec
     """
 
+    #: volume to deface,  *type(nipype.interfaces.base.File)*
     in_file = File(desc="Volume to deface", exists=True, argstr="--i %s")
+    #: defaced input, ``--o``, *type(nipype.interfaces.base.File)*
     out_file = File(
         desc="Defaced input",
         argstr="--o %s",
@@ -24,6 +30,7 @@ class MidefaceInputSpec(CommandLineInputSpec):
         name_template="%s_defaced",
         keep_extension=True,
     )
+    #: facemask, ``--facemask``, *type(nipype.interfaces.base.File)*
     out_facemask = File(
         desc="Facemask",
         argstr="--facemask %s",
@@ -31,118 +38,145 @@ class MidefaceInputSpec(CommandLineInputSpec):
         name_template="%s_defacemask",
         keep_extension=True,
     )
+    #: output directory (turns on PostHeadSurf), ``--odir``, *type(nipype.interfaces.base.Directory)*
     odir = Directory(
         desc="Output directory (turns on PostHeadSurf)",
         argstr="--odir %s",
     )
+    #: xmask (exclusion mask), ``--xmask``, *type(nipype.interfaces.base.File)*
     xmask = File(
         desc="Exclusion mask",
         argstr="--xmask %s",
         exists=True,
     )
+    #: ndilations segment input using samseg (14GB, +~20-40min) ``--xmask-samseg``, *type(nipype.traits.Int)*
     xmask_samseg = traits.Int(
         desc="Segment input using samseg (14GB, +~20-40min)",
         argstr="--xmask-samseg %d",
     )
+    #: configure samseg ``--samseg-json``, *type(nipype.interfaces.base.File)*
     samseg_json = File(
         desc="Configure samseg",
         argstr="--samseg-json %s",
         exists=True,
     )
+    #: configure samseg to run quickly; sets ndil=1 (default), ``--samseg-fast``, *type(nipype.traits.Bool)*
     samseg_fast = traits.Bool(
         desc="Configure samseg to run quickly; sets ndil=1 (default)",
         argstr="--samseg-fast",
     )
+    #: do NOT configure samseg to run quickly, ``--no-samseg-fast``, *type(nipype.traits.Bool)*
     no_samseg_fast = traits.Bool(
         desc="Do NOT configure samseg to run quickly",
         argstr="--no-samseg-fast",
     )
+    #: initialize samseg with reg (good in case samseg reg fails), ``--init-reg reg.lta``, *type(nipype.interfaces.base.File)*
     init_reg = File(
         desc="Initialize samseg with reg (good in case samseg reg fails)",
         argstr="--init-reg %s",
         exists=True,
     )
+    #: ndilations : segment input using synthseg (35GB, +~20min), ``--xmask-synthseg``, *type(nipype.traits.Int)*
     xmask_synthseg = traits.Int(
         desc="Segment input using synthseg (35GB, +~20min)",
         argstr="--xmask-synthseg %d",
     )
+    #: constIn constOut, ``--fill-const``, *type(nipype.traits.Tuple)*
     fill_const = traits.Tuple(
         traits.Float,
         traits.Float,
         desc="Fill constants",
         argstr="--fill-const %f %f",
     )
+    #: fill with zero, ``--fill-zero``, *type(nipype.traits.Bool)*
     fill_zero = traits.Bool(
         desc="Fill with zero",
         argstr="--fill-zero",
     )
+    #: do not include ears in the defacing, ``--no-ears``, *type(nipype.traits.Bool)*
     no_ears = traits.Bool(
         desc="Do not include ears in the defacing",
         argstr="--no-ears",
     )
+    #: include back of head in the defacing, ``--back-of-head``, *type(nipype.traits.Bool)*
     back_of_head = traits.Bool(
         desc="Include back of head in the defacing",
         argstr="--back-of-head",
     )
+    #: include forehead in the defacing (risks removing brain), ``--forehead``, *type(nipype.traits.Bool)*
     forehead = traits.Bool(
         desc="Include forehead in the defacing (risks removing brain)",
         argstr="--forehead",
     )
+    #: take pics (--no-pics), ``--pics``, *type(nipype.traits.Bool)*
     pics = traits.Bool(
         desc="Take pics",
         argstr="--pics",
     )
+    #: do not take pics, ``--no-pics``, *type(nipype.traits.Bool)*
     no_pics = traits.Bool(
         desc="Do not take pics",
         argstr="--no-pics",
     )
+    #: codename : embed codename in pics, ``--code``, *type(nipype.traits.Str)*
     code = traits.Str(
         desc="Embed codename in pics",
         argstr="--code %s",
     )
+    #: /path/to/convert : path to imagemagik convert binary (for pics), ``--imconvert``, *type(nipype.interfaces.base.File)*
     imconvert = File(
         desc="Path to ImageMagick convert binary (for pics)",
         argstr="--imconvert %s",
         exists=True,
     )
+    #: do not make a head surface after defacing, ``--no-post``, *type(nipype.traits.Bool)*
     no_post = traits.Bool(
         desc="Do not make a head surface after defacing",
         argstr="--no-post",
     )
+    #: number of threads, ``--threads``, *type(nipype.traits.Int)*
     threads = traits.Int(
         desc="Number of threads",
         argstr="--threads %d",
     )
+    #: force reprocessing (not applicable if --odir has not been used), ``--force``, *type(nipype.traits.Bool)*
     force = traits.Bool(
         desc="Force reprocessing (not applicable if --odir has not been used)",
         argstr="--force",
     )
+    #: use nifti format as output (only when output files are not specified), ``--nii``, *type(nipype.traits.Bool)*
     nii = traits.Bool(
         desc="Use NIfTI format as output (only when output files are not specified)",
         argstr="--nii",
     )
+    #: use compressed nifti format as output (only when output files are not specified), ``--nii.gz``, *type(nipype.traits.Bool)*
     nii_gz = traits.Bool(
         desc="Use compressed NIfTI format as output (only when output files are not specified)",
         argstr="--nii.gz",
     )
+    #: use compressed mgh format as output (default), ``--mgz``, *type(nipype.traits.Bool)*
     mgz = traits.Bool(
         desc="Use compressed MGH format as output (default)",
         argstr="--mgz",
     )
+    #: atlasdir, ``--atlas``, *type(nipype.interfaces.base.Directory)*
     atlas = Directory(
         desc="Atlas directory",
         argstr="--atlas %s",
         exists=True,
     )
+    #: expert options file, ``--expert``, *type(nipype.interfaces.base.File)*
     expert = File(
         desc="Expert options file",
         argstr="--expert %s",
         exists=True,
     )
+    #: set Xvfb display number for taking pics, ``--display``, *type(nipype.traits.Int)*
     display = traits.Int(
         desc="Set Xvfb display number for taking pics",
         argstr="--display %d",
     )
+    #: input defaced : check whether a volume has been defaced, ``--check``, *type(nipype.traits.Tuple)*
     check = traits.Tuple(
         File,
         File,
@@ -153,10 +187,19 @@ class MidefaceInputSpec(CommandLineInputSpec):
 
 class MidefaceOutputSpec(TraitedSpec):
     """
-    _summary_
+    Set of traits corresponding to the desired mideface output files for this petdefacing pipeline.
 
-    :param TraitedSpec: _description_
-    :type TraitedSpec: _type_
+    :cvar out_file: the file given to deface
+    :type out_file: nipype.interfaces.base.File
+    :cvar out_facemask: the deface facemask to apply
+    :type out_facemask: nipype.interfaces.base.File
+    :cvar out_before_pic: png before pic of faced T1w image (only if pics is True)
+    :type out_before_pic: nipype.interfaces.base.File
+    :cvar out_after_pic: png after pic  of defaced T1w image (only if pics is True)
+    :type out_after_pic: nipype.interfaces.base.File
+
+    :param TraitedSpec: nipype TraitedSpec class
+    :type TraitedSpec: nipype.interfaces.base.TraitedSpec
     """
 
     out_file = File(desc="Defaced input", exists=True)
@@ -219,24 +262,28 @@ class ApplyMidefaceInputSpec(CommandLineInputSpec):
     :type CommandLineInputSpec: _type_
     """
 
+    #: volume to deface,  *type(nipype.interfaces.base.File)*
     in_file = File(
         desc="Volume to deface",
         exists=True,
         position=1,
         argstr="%s",
     )
+    #: facemask to apply to volume to deface, *type(nipype.interfaces.base.File)*
     facemask = File(
         desc="Facemask",
         exists=True,
         position=2,
         argstr="%s",
     )
+    #: registration matrix lta file, *type(nipype.interfaces.base.File)*
     lta_file = File(
         desc="Registration matrix lta file",
         exists=True,
         position=3,
         argstr="%s",
     )
+    #: defaced input, ``--o``, *type(nipype.interfaces.base.File)*
     out_file = File(
         desc="Defaced input",
         position=4,
@@ -253,12 +300,19 @@ class ApplyMidefaceOutputSpec(TraitedSpec):
 
 class ApplyMideface(CommandLine):
     """
-    _summary_
+    Runs mideface with the ``--apply`` flag to apply a facemask to a volume, uses inputs and outputs 
+    definde in ApplyMidefaceInputSpec and ApplyMidefaceOutputSpec respectively.
 
-    :param CommandLine: _description_
-    :type CommandLine: _type_
+    This class is used to deface a pet image using a previously created facemask from an anatomical (T1w) image.
+    Requires petdeface.Mideface to have been run previously run and an input PET image. 
+
+    :param CommandLine: nipype CommandLine class
+    :type CommandLine: nipype.interfaces.base.CommandLine
     """
 
+    #: command to apply
     _cmd = "mideface --apply"
+    #: apply mideface inputs defined as traits in ApplyMidefaceInputSpec
     input_spec = ApplyMidefaceInputSpec
+    #: apply mideface outputs defined as traits in ApplyMidefaceOutputSpec
     output_spec = ApplyMidefaceOutputSpec
