@@ -224,10 +224,11 @@ class Mideface(CommandLine):
 
     def _list_outputs(self):
         """
-        _summary_
+        Overrides default nipype CommandLine _list_outputs method to help in collecting
+        additional outputs from mideface. Namely, this method collects the before pic and after pic.
 
-        :return: _description_
-        :rtype: _type_
+        :return: outputs from mideface
+        :rtype: dict
         """
         metadata = dict(name_source=lambda t: t is not None)
         traits = self.inputs.traits(**metadata)
@@ -300,11 +301,11 @@ class ApplyMidefaceOutputSpec(TraitedSpec):
 
 class ApplyMideface(CommandLine):
     """
-    Runs mideface with the ``--apply`` flag to apply a facemask to a volume, uses inputs and outputs 
+    Runs mideface with the ``--apply`` flag to apply a facemask to a volume, uses inputs and outputs
     definde in ApplyMidefaceInputSpec and ApplyMidefaceOutputSpec respectively.
 
     This class is used to deface a pet image using a previously created facemask from an anatomical (T1w) image.
-    Requires petdeface.Mideface to have been run previously run and an input PET image. 
+    Requires petdeface.Mideface to have been run previously run and an input PET image.
 
     :param CommandLine: nipype CommandLine class
     :type CommandLine: nipype.interfaces.base.CommandLine

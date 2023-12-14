@@ -17,6 +17,12 @@ Or cloned and installed from source::
     pip install dist/petdeface-<X.X.X>-py3-none-any.whl 
     # where X.X.X is the version number of the generated file
 
+.. raw:: html
+
+    <script async id="asciicast-626689" src="https://asciinema.org/a/626689.js"
+    async data-autoplay="true" data-speed="1.5" data-loop="true"></script>
+
+
 Dependencies
 ------------
 

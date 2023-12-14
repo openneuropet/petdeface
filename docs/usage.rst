@@ -10,6 +10,11 @@ After installation PETdeface can be run from as follows::
 
     petdeface /inputfolder --output_dir /outputfolder
 
+.. raw:: html
+
+    <script async id="asciicast-626691" src="https://asciinema.org/a/626691.js"
+    async data-autoplay="true" data-speed="1.5" data-loop="true"></script>
+
 Given a PET BIDS dataset like below::
 
     tree /inputfolder
