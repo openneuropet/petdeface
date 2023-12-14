@@ -189,37 +189,35 @@ class MidefaceOutputSpec(TraitedSpec):
     """
     Set of traits corresponding to the desired mideface output files for this petdefacing pipeline.
 
-    :cvar out_file: the file given to deface
-    :type out_file: nipype.interfaces.base.File
-    :cvar out_facemask: the deface facemask to apply
-    :type out_facemask: nipype.interfaces.base.File
-    :cvar out_before_pic: png before pic of faced T1w image (only if pics is True)
-    :type out_before_pic: nipype.interfaces.base.File
-    :cvar out_after_pic: png after pic  of defaced T1w image (only if pics is True)
-    :type out_after_pic: nipype.interfaces.base.File
-
     :param TraitedSpec: nipype TraitedSpec class
     :type TraitedSpec: nipype.interfaces.base.TraitedSpec
     """
 
+    #: trait for defaced input, ``--o``, *type(nipype.interfaces.base.File)*
     out_file = File(desc="Defaced input", exists=True)
+    #: trait for facemask, ``--facemask``, *type(nipype.interfaces.base.File)*
     out_facemask = File(desc="Facemask", exists=True)
+    #: trait for before defacing picture
     out_before_pic = File(desc="before pic", exists=True)
+    #: trait for after defacing picture
     out_after_pic = File(desc="after pic", exists=True)
 
 
 class Mideface(CommandLine):
     """
-    _summary_
+    nipype implementation of Freesurfer's MiDeface command line tool. This class is used to deface an anatomical
+    image. Inherits from a nipype CommandLine class and uses the MidefaceInputSpec and MidefaceOutputSpec traits
+    as input and output.
 
-    :param CommandLine: _description_
-    :type CommandLine: _type_
-    :return: _description_
-    :rtype: _type_
+    :param CommandLine: Inherits from nipype CommandLine class
+    :type CommandLine: nipype.interfaces.base.CommandLine
     """
 
+    #: command to run, defaults to "mideface"
     _cmd = "mideface"
+    #: mideface inputs defined as traits in MidefaceInputSpec
     input_spec = MidefaceInputSpec
+    #: mideface outputs defined as traits in MidefaceOutputSpec
     output_spec = MidefaceOutputSpec
 
     def _list_outputs(self):
@@ -257,10 +255,10 @@ class Mideface(CommandLine):
 
 class ApplyMidefaceInputSpec(CommandLineInputSpec):
     """
-    _summary_
+    nipype CommandLineInputSpec for running mideface with the ``--apply`` flag to apply a facemask to a volume.
 
-    :param CommandLineInputSpec: _description_
-    :type CommandLineInputSpec: _type_
+    :param CommandLineInputSpec: nipype CommandLineInputSpec class to inherit from
+    :type CommandLineInputSpec: nipype.interfaces.base.CommandLineInputSpec
     """
 
     #: volume to deface,  *type(nipype.interfaces.base.File)*
@@ -296,6 +294,14 @@ class ApplyMidefaceInputSpec(CommandLineInputSpec):
 
 
 class ApplyMidefaceOutputSpec(TraitedSpec):
+    """
+    nipype TraitedSpec class for ApplyMideface. Defines the output trait for ApplyMideface, which
+    is the defaced image that a facemask has been applied to.
+
+    :param TraitedSpec: nipype TraitedSpec class to inherit from
+    :type TraitedSpec: nipype.interfaces.base.TraitedSpec
+    """
+
     out_file = File(desc="Defaced input", exists=True)
 
 
