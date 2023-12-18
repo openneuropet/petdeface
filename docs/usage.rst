@@ -75,7 +75,10 @@ Previously faced files are replaced with defaced images while the registration, 
 When viewed, a succesfully defaced PET image will have varying intensities in the face region, as shown below:
 
 .. image:: /_static/defaced_pet_side_view.png
-   :align: left
+    :align: left
+
+.. image:: /_static/sagittal.gif
+    :align: left
 
 -----------------
 

@@ -9,7 +9,12 @@ Welcome to petdeface's documentation!
 petdeface is a nipype implementation of an anatomical MR and PET defacing pipeline for BIDS datasets. 
 This is a working prototype, in active development denoted by the 0.x.x version number. 
 
-However, it is functional and can be used to deface PET and MR data as well as co-register the two modalities. 
+.. image:: _static/3d_rotate.gif
+   :align: center
+
+|
+
+Petdface can be used to deface PET and MR data as well as co-register the two modalities. 
 Use is encouraged and feedback via Github issues or email to openneuropet@gmail.com is more than welcome. 
 As is often the case, this medical research software is constrained to testing on data that its developers 
 have access to.
