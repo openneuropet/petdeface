@@ -22,21 +22,24 @@ class WeightedAverage(BaseInterface):
     """
     Create a time-weighted average of dynamic PET data using mid-frames.
 
-    :param BaseInterface: _description_
-    :type BaseInterface: _type_
-    :return: _description_
-    :rtype: _type_
+    :param BaseInterface: nipype BaseInterface class to inherit from
+    :type BaseInterface: nipype.interfaces.base.BaseInterface
+    :return: none
+    :rtype: none
     """
 
+    #: nipype input specification for the interface
     input_spec = WeightedAverageInputSpec
+    #: nipype output specification for the interface
     output_spec = WeightedAverageOutputSpec
 
     def _run_interface(self, runtime):
         """
-        _summary_
+        Loads a pet file and calculates the time-weighted average from its frames.
+        Saves average into nifti file with _desc-wavg_pet suffix.
 
-        :param runtime: _description_
-        :type runtime: _type_
+        :param runtime:
+        :type runtime:
         """
         pet_file = self.inputs.pet_file
         bids_dir = os.path.dirname(pet_file)
@@ -61,10 +64,10 @@ class WeightedAverage(BaseInterface):
 
     def _list_outputs(self):
         """
-        _summary_
+        Returns the output of the interface.
 
-        :return: _description_
-        :rtype: _type_
+        :return: outputs calculated in _run_interface
+        :rtype: dict
         """
         outputs = self._outputs().get()
         pet_file = self.inputs.pet_file
