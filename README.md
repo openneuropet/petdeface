@@ -1,4 +1,5 @@
 # petdeface
+
 A nipype implementation of an anatomical MR and PET defacing pipeline for BIDS datasets. This is a working prototype,
 in active development denoted by the 0.x.x version number. However, it is functional and can be used to deface PET and
 MR data as well as co-register the two modalities. Use is encouraged and feedback via Github issues or email to
@@ -6,6 +7,12 @@ openneuropet@gmail.com is more than welcome. As is often the case, this medical 
 to testing on data that its developers have access to.
 
 This software can be installed via source or via pip from PyPi with `pip install petdeface`
+
+---
+
+| CI  | Status |   
+|---------| ------ |
+| `docker build . -t petdeface` | ![docker_build](https://codebuild.us-east-1.amazonaws.com/badges?uuid=eyJlbmNyeXB0ZWREYXRhIjoiYzdXV0tYSkQzTVNkcG04cHA2S055UXlKRlZTU1VONThUMVRoZVcwU3l1aHFhdVBlNDNaRGVCYzdWM1Q0WjYzQ1lRU2ZTSHpmSERPWFRkVXVyb3k3RTZBPSIsIml2UGFyYW1ldGVyU3BlYyI6IjRCZFFIQnNGT2lKcDA1VG4iLCJtYXRlcmlhbFNldFNlcmlhbCI6MX0%3D&branch=main) |
 
 ## Requirements
 
