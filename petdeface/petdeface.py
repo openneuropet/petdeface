@@ -120,7 +120,6 @@ def determine_in_docker():
     """
     Determines if the script is running in a docker container, returns True if it is, False otherwise
 
-
     :return: if running in docker container
     :rtype: bool
     """
@@ -145,14 +144,14 @@ def determine_in_docker():
 
 def check_docker_image_exists(image_name, build=False):
     """
-    _summary_
+    Checks to see if a docker image exists, if it does not and build is set to True, it will attempt to build the image.
 
-    :param image_name: _description_
-    :type image_name: _type_
-    :param build: _description_, defaults to False
+    :param image_name: name of docker image
+    :type image_name: string
+    :param build: try to build a docker image if none is found, defaults to False
     :type build: bool, optional
-    :return: _description_
-    :rtype: _type_
+    :return: status of whether or not the image exists
+    :rtype: bool
     """
     try:
         subprocess.run(
@@ -189,9 +188,9 @@ def deface(args: Union[dict, argparse.Namespace]) -> None:
     """
     Main function for the PET Deface workflow.
 
-    :param args: _description_
+    :param args: given a dictionary or argparsed namespace, this function will run the defacing workflow
     :type args: Union[dict, argparse.Namespace]
-    :raises Exception: _description_
+    :raises Exception: if a valid FreeSurfer license is not found
     """
 
     if type(args) is dict:
@@ -237,27 +236,6 @@ def deface(args: Union[dict, argparse.Namespace]) -> None:
 
     # remove temp outputs - this is commented out to enable easier testing for now
     shutil.rmtree(os.path.join(output_dir, "petdeface_wf"))
-
-
-def count_matching_chars(a: str, b: str) -> int:
-    """
-    Count the number of matching characters up to first discrepancy.
-
-    :param a: _description_
-    :type a: str
-    :param b: _description_
-    :type b: str
-    :return: _description_
-    :rtype: int
-    """
-    n = min(len(a), len(b))
-    result = 0
-    for i in range(n):
-        if a[i] == b[i]:
-            result += 1
-        else:
-            return result
-    return result
 
 
 def init_single_subject_wf(
@@ -442,12 +420,12 @@ def init_single_subject_wf(
 
 def write_out_dataset_description_json(input_bids_dir, output_bids_dir=None):
     """
-    _summary_
+    Writes an generic dataset_description.json file to the output directory.
 
-    :param input_bids_dir: _description_
-    :type input_bids_dir: _type_
-    :param output_bids_dir: _description_, defaults to None
-    :type output_bids_dir: _type_, optional
+    :param input_bids_dir: the input bids directory
+    :type input_bids_dir: Union[pathlib.Path, str]
+    :param output_bids_dir: the output defaced directory, defaults to None
+    :type output_bids_dir: Union[pathlib.Path, str]
     """
     # set output dir to input dir if output dir is not specified
     if output_bids_dir is None:
@@ -628,19 +606,17 @@ def wrap_up_defacing(
 def move_defaced_images(
     mapping_dict: dict,
     final_destination: Union[str, pathlib.Path],
-    include_extra_anat: bool = False,
     move_files: bool = False,
 ):
     """
-    _summary_
+    Moves images created in defacing workflow to final destination given a dictionary mapping
+    the defaced images to the original images.
 
-    :param mapping_dict: _description_
+    :param mapping_dict: dictionary mapping defaced images to original images
     :type mapping_dict: dict
-    :param final_destination: _description_
+    :param final_destination: final destination for defaced images
     :type final_destination: Union[str, pathlib.Path]
-    :param include_extra_anat: _description_, defaults to False
-    :type include_extra_anat: bool, optional
-    :param move_files: _description_, defaults to False
+    :param move_files: delete defaced images in "working" directory, e.g. move them to the destination dir instead of copying them there, defaults to False
     :type move_files: bool, optional
     """
     # update paths in mapping dict
@@ -680,7 +656,7 @@ def move_defaced_images(
 
 class PetDeface:
     """
-    _summary_
+    Defacing class used to collect inputs, out dirs, perform initial setup, and finally run the defacing workflow.
     """
 
     def __init__(
@@ -712,7 +688,8 @@ class PetDeface:
 
     def run(self):
         """
-        _summary_
+        Runs the defacing workflow given inputs from instiantiation and wraps up defacing by collecting output
+        files and moving them to their final destination.
         """
         deface(
             {
@@ -738,7 +715,7 @@ class PetDeface:
 
 def cli():
     """
-    _summary_
+    Argparse based cli for petdeface
     """
     parser = argparse.ArgumentParser(description="PetDeface")
 
@@ -821,7 +798,9 @@ def cli():
 
 def main():  # noqa: max-complexity: 12
     """
-    _summary_
+    Main function for petdeface, uses argparse to collect inputs and then runs the defacing workflow and additionally
+    performs steps required for running petdeface in docker if the --docker flag is passed. This includes mounting
+    the input, output, and freesurfer license as well as creating the command to for docker run to execute the workflow.
     """
     # determine present working directory
     pwd = pathlib.Path.cwd()
