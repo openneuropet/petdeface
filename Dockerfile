@@ -35,7 +35,7 @@ ENV FREESURFER_HOME="/opt/freesurfer" \
 
 # copy over local freesurfer binaries
 RUN mkdir /freesurfer_binaries
-COPY freesurfer_binaries/freesurfer-linux-centos7_x86_64-${FREESURFER_VERSION}.tar.gz /freesurfer_binaries/
+COPY freesurfer_binaries/* /freesurfer_binaries/
 
 ARG USE_LOCAL_FREESURFER
 RUN echo USE_LOCAL_FREESURFER=${USE_LOCAL_FREESURFER}
