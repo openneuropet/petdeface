@@ -802,7 +802,6 @@ def cli():
     )
 
     arguments = parser.parse_args()
-    print(arguments)
     return arguments
 
 
