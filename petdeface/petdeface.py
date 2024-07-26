@@ -197,7 +197,7 @@ def deface(args: Union[dict, argparse.Namespace]) -> None:
         args = argparse.Namespace(**args)
     else:
         args = args
-
+    
     if not check_valid_fs_license():
         raise Exception("You need a valid FreeSurfer license to proceed!")
 
@@ -218,7 +218,7 @@ def deface(args: Union[dict, argparse.Namespace]) -> None:
 
     for subject_id in participants:
         try:
-            single_subject_wf = init_single_subject_wf(subject_id, args.bids_dir)
+            single_subject_wf = init_single_subject_wf(subject_id, args.bids_dir, preview_pics=args.preview_pics)
         except FileNotFoundError:
             single_subject_wf = None
 
@@ -242,6 +242,7 @@ def init_single_subject_wf(
     subject_id: str,
     bids_data: [pathlib.Path, BIDSLayout],
     output_dir: pathlib.Path = None,
+    preview_pics=False
 ) -> Workflow:
     """
     Organize the preprocessing pipeline for a single subject.
@@ -308,11 +309,9 @@ def init_single_subject_wf(
 
         t1w_wf = Workflow(name=workflow_name)
 
-        # create preview pics
+        # always set preview pics to false if running in docker
         if determine_in_docker():
             preview_pics = False
-        else:
-            preview_pics = True
 
         deface_t1w = Node(
             Mideface(
@@ -670,6 +669,7 @@ class PetDeface:
         skip_bids_validator=True,
         remove_existing=True,  # TODO: currently not implemented
         placement="adjacent",  # TODO: currently not implemented
+        preview_pics=True,
     ):
         self.bids_dir = bids_dir
         self.remove_existing = remove_existing
@@ -680,6 +680,7 @@ class PetDeface:
         self.session = session
         self.n_procs = n_procs
         self.skip_bids_validator = skip_bids_validator
+        self.preview_pics = preview_pics
 
         # check if freesurfer license is valid
         self.fs_license = check_valid_fs_license()
@@ -703,6 +704,7 @@ class PetDeface:
                 "participant_label": self.subject,
                 "placement": self.placement,
                 "remove_existing": self.remove_existing,
+                "preview_pics": self.preview_pics,
             }
         )
         wrap_up_defacing(
@@ -790,9 +792,15 @@ def cli():
         action="store_true",
         default=False,
     )
+    parser.add_argument(
+        "--preview_pics",
+        help="Create preview pictures of defacing, defaults to false for docker",
+        action="store_true",
+        default=False,
+    )
 
     arguments = parser.parse_args()
-
+    print(arguments)
     return arguments
 
 
@@ -918,6 +926,7 @@ def main():  # noqa: max-complexity: 12
             skip_bids_validator=args.skip_bids_validator,
             remove_existing=args.remove_existing,
             placement=args.placement,
+            preview_pics=args.preview_pics
         )
         petdeface.run()
 
