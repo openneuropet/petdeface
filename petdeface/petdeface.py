@@ -197,7 +197,7 @@ def deface(args: Union[dict, argparse.Namespace]) -> None:
         args = argparse.Namespace(**args)
     else:
         args = args
-    
+
     if not check_valid_fs_license():
         raise Exception("You need a valid FreeSurfer license to proceed!")
 
@@ -218,7 +218,9 @@ def deface(args: Union[dict, argparse.Namespace]) -> None:
 
     for subject_id in participants:
         try:
-            single_subject_wf = init_single_subject_wf(subject_id, args.bids_dir, preview_pics=args.preview_pics)
+            single_subject_wf = init_single_subject_wf(
+                subject_id, args.bids_dir, preview_pics=args.preview_pics
+            )
         except FileNotFoundError:
             single_subject_wf = None
 
@@ -242,7 +244,7 @@ def init_single_subject_wf(
     subject_id: str,
     bids_data: [pathlib.Path, BIDSLayout],
     output_dir: pathlib.Path = None,
-    preview_pics=False
+    preview_pics=False,
 ) -> Workflow:
     """
     Organize the preprocessing pipeline for a single subject.
@@ -926,7 +928,7 @@ def main():  # noqa: max-complexity: 12
             skip_bids_validator=args.skip_bids_validator,
             remove_existing=args.remove_existing,
             placement=args.placement,
-            preview_pics=args.preview_pics
+            preview_pics=args.preview_pics,
         )
         petdeface.run()
 
