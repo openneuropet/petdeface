@@ -79,20 +79,32 @@ def locate_freesurfer_license():
     :return: full path to Freesurfer license file
     :rtype: pathlib.Path
     """
-    # collect freesurfer home environment variable
-    fs_home = pathlib.Path(os.environ.get("FREESURFER_HOME", ""))
-    if not fs_home:
-        raise ValueError(
-            "FREESURFER_HOME environment variable is not set, unable to determine location of license file"
-        )
-    else:
-        fs_license = fs_home / pathlib.Path("license.txt")
-        if not fs_license.exists():
+
+    # check to see if FREESURFER_LICENSE variable is set, if so we can skip the rest of this function
+    if os.environ.get("FREESURFER_LICENSE", ""):
+        fs_license_env_var = pathlib.Path(os.environ.get("FREESURFER_LICENSE", ""))
+        if not fs_license_env_var.exists():
             raise ValueError(
-                "Freesurfer license file does not exist at {}".format(fs_license)
+                f"Freesurfer license file does not exist at {fs_license_env_var}, but is set under $FREESURFER_LICENSE variable."
+                f"Update or unset this varible to use the license.txt at $FREESURFER_HOME"
             )
         else:
-            return fs_license
+            return fs_license_env_var
+    else:
+    # collect freesurfer home environment variable and look there instead
+        fs_home = pathlib.Path(os.environ.get("FREESURFER_HOME", ""))
+        if not fs_home:
+            raise ValueError(
+                "FREESURFER_HOME environment variable is not set, unable to determine location of license file"
+            )
+        else:
+            fs_license = fs_home / pathlib.Path("license.txt")
+            if not fs_license.exists():
+                raise ValueError(
+                    "Freesurfer license file does not exist at {}".format(fs_license)
+                )
+            else:
+                return fs_license
 
 
 def check_docker_installed():
@@ -198,7 +210,7 @@ def deface(args: Union[dict, argparse.Namespace]) -> None:
     else:
         args = args
 
-    if not check_valid_fs_license():
+    if not check_valid_fs_license() and not locate_freesurfer_license().exists():
         raise Exception("You need a valid FreeSurfer license to proceed!")
 
     if args.participant_label:
@@ -687,7 +699,11 @@ class PetDeface:
         # check if freesurfer license is valid
         self.fs_license = check_valid_fs_license()
         if not self.fs_license:
-            raise ValueError("Freesurfer license is not valid")
+            self.fs_license = locate_freesurfer_license()
+            if not self.fs_license.exists():
+                raise ValueError("Freesurfer license is not valid")
+            else:
+                print(f"Using freesurfer license at {self.fs_license} found in system env at $FREESURFER_LICENSE")
 
     def run(self):
         """
@@ -763,6 +779,13 @@ def cli():
         action="store_true",
         default=False,
         help="Run in docker container",
+    ),
+    parser.add_argument(
+        "--singularity",
+        "-si",
+        action="store_true",
+        default=False,
+        help="Run in singularity container",
     ),
     parser.add_argument(
         "--n_procs",
@@ -899,8 +922,16 @@ def main():  # noqa: max-complexity: 12
             docker_command += f"-v {code_dir}:/petdeface "
 
         # collect location of freesurfer license if it's installed and working
-        if check_valid_fs_license():
-            license_location = locate_freesurfer_license()
+        try:
+            check_valid_fs_license()
+        except:
+            if locate_freesurfer_license().exists():
+                license_location = locate_freesurfer_license()
+            else:
+                raise FileNotFoundError(
+                    "Freesurfer license not found, please set FREESURFER_LICENSE environment variable or place license.txt in FREESURFER_HOME"
+                )
+
             if license_location:
                 docker_command += f"-v {license_location}:/opt/freesurfer/license.txt "
 
@@ -915,6 +946,74 @@ def main():  # noqa: max-complexity: 12
         print("Running docker command: \n{}".format(docker_command))
 
         subprocess.run(docker_command, shell=True)
+
+    elif args.singularity:
+        singularity_command = f"singularity exec -e"
+
+        input_mount_point = str(args.input_dir)
+        output_mount_point = str(args.output_dir)
+
+        if output_mount_point == "None" or output_mount_point is None:
+            output_mount_point = str(args.input_dir / "derivatives" / "petdeface")
+
+        # create output directory if it doesn't exist
+        if not pathlib.Path(output_mount_point).exists():
+            pathlib.Path(output_mount_point).mkdir(parents=True, exist_ok=True)
+
+        args.input_dir = pathlib.Path("/input")
+        args.output_dir = pathlib.Path("/output")
+        print(
+            "Attempting to run in docker container with singularity exec, mounting {} to {} and {} to {}".format(
+                input_mount_point, args.input_dir, output_mount_point, args.output_dir
+            )
+        )
+        # convert args to dictionary
+        args_dict = vars(args)
+        for key, value in args_dict.items():
+            if isinstance(value, pathlib.PosixPath):
+                args_dict[key] = str(value)
+
+        args_dict.pop("singularity")
+
+        # remove False boolean keys and values, and set true boolean keys to empty string
+        args_dict = {key: value for key, value in args_dict.items() if value}
+        set_to_empty_str = [key for key, value in args_dict.items() if value == True]
+        for key in set_to_empty_str:
+            args_dict[key] = "empty_str"
+
+        args_string = " ".join(
+            ["--{} {}".format(key, value) for key, value in args_dict.items() if value]
+        )
+        args_string = args_string.replace("empty_str", "")
+
+        # remove --input_dir from args_string as input dir is positional, we
+        # we're simply removing an artifact of argparse
+        args_string = args_string.replace("--input_dir", "")
+
+
+        # add volume mounts to singularity command
+        singularity_command += f" --bind {input_mount_point}:/input"
+        singularity_command += f" --bind {output_mount_point}:/output"
+
+        # collect location of freesurfer license if it's installed and working
+        try:
+            check_valid_fs_license()
+        except:
+            if locate_freesurfer_license().exists():
+                license_location = locate_freesurfer_license()
+            else:
+                raise FileNotFoundError(
+                    "Freesurfer license not found, please set FREESURFER_LICENSE environment variable or place license.txt in FREESURFER_HOME"
+                )
+
+        singularity_command += f" --bind {str(license_location)}:/opt/freesurfer/license.txt"
+        singularity_command += f" docker://openneuropet/petdeface:{__version__}"
+        singularity_command += args_string
+
+        print("Running singularity command: \n{}".format(singularity_command))
+
+        subprocess.run(singularity_command, shell=True)
+
 
     else:
         petdeface = PetDeface(
