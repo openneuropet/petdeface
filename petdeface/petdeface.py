@@ -950,23 +950,13 @@ def main():  # noqa: max-complexity: 12
     elif args.singularity:
         singularity_command = f"singularity exec -e"
 
-        input_mount_point = str(args.input_dir)
-        output_mount_point = str(args.output_dir)
-
-        if output_mount_point == "None" or output_mount_point is None:
-            output_mount_point = str(args.input_dir / "derivatives" / "petdeface")
+        if args.output_dir == "None" or args.output_dir is None or args.output_dir == "":
+            args.output_dir = args.input_dir / "derivatives" / "petdeface"
 
         # create output directory if it doesn't exist
-        if not pathlib.Path(output_mount_point).exists():
-            pathlib.Path(output_mount_point).mkdir(parents=True, exist_ok=True)
+        if not args.output_dir.exists():
+            args.output_dir.mkdir(parents=True, exist_ok=True)
 
-        args.input_dir = pathlib.Path("/input")
-        args.output_dir = pathlib.Path("/output")
-        print(
-            "Attempting to run in docker container with singularity exec, mounting {} to {} and {} to {}".format(
-                input_mount_point, args.input_dir, output_mount_point, args.output_dir
-            )
-        )
         # convert args to dictionary
         args_dict = vars(args)
         for key, value in args_dict.items():
@@ -990,11 +980,6 @@ def main():  # noqa: max-complexity: 12
         # we're simply removing an artifact of argparse
         args_string = args_string.replace("--input_dir", "")
 
-
-        # add volume mounts to singularity command
-        singularity_command += f" --bind {input_mount_point}:/input"
-        singularity_command += f" --bind {output_mount_point}:/output"
-
         # collect location of freesurfer license if it's installed and working
         try:
             check_valid_fs_license()
@@ -1008,6 +993,7 @@ def main():  # noqa: max-complexity: 12
 
         singularity_command += f" --bind {str(license_location)}:/opt/freesurfer/license.txt"
         singularity_command += f" docker://openneuropet/petdeface:{__version__}"
+        singularity_command += f" petdeface"
         singularity_command += args_string
 
         print("Running singularity command: \n{}".format(singularity_command))
