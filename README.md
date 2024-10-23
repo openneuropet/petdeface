@@ -36,9 +36,10 @@ This software can be installed via source or via pip from PyPi with `pip install
 
 ```bash
 usage: petdeface.py [-h] [--output_dir OUTPUT_DIR] [--anat_only]
-       [--subject SUBJECT] [--session SESSION] [--docker]
-       [--n_procs N_PROCS] [--skip_bids_validator] [--version]
-       [--placement PLACEMENT] [--remove_existing] input_dir
+       [--subject SUBJECT] [--session SESSION] [--docker] 
+       [--singularity] [--n_procs N_PROCS] [--skip_bids_validator] 
+       [--version] [--placement PLACEMENT] [--remove_existing] 
+       input_dir
 
 PetDeface
 
@@ -55,6 +56,7 @@ options:
   --session SESSION, -ses SESSION
                         The label of the session to be processed.
   --docker, -d          Run in docker container
+  --singularity, -si    Run in singularity container
   --n_procs N_PROCS     Number of processors to use when running the workflow
   --skip_bids_validator
   --version, -v         show programs version number and exit
@@ -105,6 +107,29 @@ docker run --user=$UID:$GID -a stderr -a stdout --rm \
 --platform linux/amd64 \
 petdeface:latest  /input --output_dir /output --n_procs 16 --skip_bids_validator  --placement adjacent --user=$UID:$GID system_platform=Linux
 ```
+
+### Singularity Usage
+
+Requirements:
+  - Singularity must be installed
+  - `openneuropet/petdeface` must be present or reachable at dockerhub
+
+One can execute petdeface in singularity either directly via:
+
+```bash
+singularity exec -e --bind license.txt:/opt/freesurfer/license.txt docker://openneuropet/petdeface:0.1.1 petdeface
+```
+
+Input and Output directories don't need to be bound, but one does need to bind a freesurfer license to the image before they can proceed with defacing.
+Otherwise, one can run and execute petdeface with the same syntax as calling it from the command line, the only difference being that petdeface is prepended
+with `singularity exec -e`
+
+```bash
+singularity exec -e --bind license.txt:/opt/freesurfer/license.txt docker://openneuropet/petdeface:0.1.1 petdeface /input --output-dir /output --n_procs 10
+```
+
+**_NOTE_**: Testing with singularity has been limited to version singularity-ce 4.2.0, please let us know in the issues section of this repo if you have 
+trouble running this container in singularity/apptainer.
 
 ## Development
 
