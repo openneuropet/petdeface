@@ -6,6 +6,7 @@ import re
 import sys
 import shutil
 from bids import BIDSLayout
+import importlib
 import glob
 from platform import system
 
@@ -51,7 +52,7 @@ __bids_version__ = "1.8.0"
 for place in places_to_look:
     for root, folders, files in os.walk(place):
         for file in files:
-            if file.endswith("pyproject.toml"):
+            if file.endswith("pyproject.toml") and "petdeface" in os.path.join(root, file):
                 toml_file = os.path.join(root, file)
 
                 with open(toml_file, "r") as f:
@@ -66,7 +67,16 @@ for place in places_to_look:
                             __bids_version__ = (
                                 line.split("=")[1].strip().replace('"', "")
                             )
-                break
+                # if the version number is found and is formatted  with major.minor.patch formating we can break
+                # we check the version with a regex expression to see if all of the parts are there
+                if re.match(r"\d+\.\d+\.\d+", __version__):
+                    break
+            
+            if __version__ != "unable to locate version number in pyproject.toml":
+                    # we try to load the version using import lib
+                    __version__ = importlib.metadata.version("petdeface")
+                    if re.match(r"\d+\.\d+\.\d+", __version__):
+                        break
 
 
 def locate_freesurfer_license():
