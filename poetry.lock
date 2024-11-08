@@ -1555,12 +1555,14 @@ tests = ["codecov", "pytest", "pytest-cov"]
 
 [[package]]
 name = "niworkflows"
-version = "1.12.0.dev8+gcd633c99"
+version = "1.11.0"
 description = "NeuroImaging Workflows provides processing tools for magnetic resonance images of the brain."
 optional = false
-python-versions = ">=3.9"
-files = []
-develop = false
+python-versions = ">=3.8"
+files = [
+    {file = "niworkflows-1.11.0-py3-none-any.whl", hash = "sha256:f194fa958caf960ae1cba4333257eb9f0ad39efc9f23cd39f91b59495684c18c"},
+    {file = "niworkflows-1.11.0.tar.gz", hash = "sha256:932bc150ea29f7d83febda9ecd05023ecd45454b532a0aec2b505ebf0a25cbc7"},
+]
 
 [package.dependencies]
 acres = "*"
@@ -1583,6 +1585,7 @@ scipy = "*"
 seaborn = "*"
 svgutils = ">=0.3.4"
 templateflow = ">=0.7.2"
+traits = "<6.4"
 transforms3d = "*"
 
 [package.extras]
@@ -1592,12 +1595,6 @@ docs = ["furo", "pydot (>=1.2.3)", "pydotplus", "sphinx", "sphinxcontrib-apidoc"
 pointclouds = ["pyntcloud"]
 style = ["flake8 (>=3.7.0)"]
 tests = ["coverage (>=5.2.1)", "pytest (>=4.4)", "pytest-cov", "pytest-env", "pytest-xdist (>=1.28)", "pytest-xvfb"]
-
-[package.source]
-type = "git"
-url = "https://github.com/nipreps/niworkflows.git"
-reference = "HEAD"
-resolved_reference = "cd633c991bc78e84c7ddfd8b48b885abe9e665f7"
 
 [[package]]
 name = "nodeenv"
@@ -3230,4 +3227,4 @@ files = [
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.10, <4.0"
-content-hash = "e979ca8933fae0490492e21db707cc39832de351c3ae1c17633d78ff38a94f28"
+content-hash = "d13eaeabc8d858d5540db6627dec495e106ff940245e5c50b9b2997e6b163b93"
