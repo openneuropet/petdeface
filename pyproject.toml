@@ -16,9 +16,9 @@ bids_version = "1.8.0"
 
 [tool.poetry.dependencies]
 python = ">=3.10, <4.0"
-niworkflows = { git = "https://github.com/nipreps/niworkflows.git" }
 setuptools = "^68.1.2"
 petutils = "^0.0.1"
+niworkflows = "^1.11.0"
 
 [tool.poetry.group.dev.dependencies]
 black = "^23.7.0"
