@@ -148,3 +148,22 @@ If one is running PETdeface on a linux machine and desires non-root execution of
 the ``--user`` flag needs to be set to the UID and GID of the user running the container.
 
 Of course all of the above is done automatically when running PETdeface using the ``--docker`` flag.
+
+Singularity Based
+-----------------
+
+PETdeface can also be run using singularity, however one will need access to the internet/dockerhub as 
+it relies on being able to retrieve the docker image from dockerhub. The syntax is as follows::
+
+    petdeface /inputfolder --output_dir /outputfolder --singularity
+
+Running petdeface in singularity will generate then execute a singularity command that will pull the 
+docker image from dockerhub and run the pipeline.
+
+    singularity exec -e --bind license.txt:/opt/freesurfer/license.txt docker://openneuropet/petdeface:latest petdeface /inputfolder --output_dir /outputfolder --n_procs 2 --placement adjacent
+
+PETdeface will do it's best to locate a valid FreeSurfer license file on the host machine and bind it 
+to the container by checking `FREESURFER_HOME`  and `FREESURFER_LICENSE` environment variables. If you 
+receive an error message relating to the FreeSurfer license file, try setting and exporting the 
+`FREESURFER_LICENSE` environment variable to the location of the FreeSurfer license file on the host 
+machine.
