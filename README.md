@@ -36,10 +36,10 @@ This software can be installed via source or via pip from PyPi with `pip install
 
 ```bash
 usage: petdeface.py [-h] [--output_dir OUTPUT_DIR] [--anat_only]
-       [--subject SUBJECT] [--session SESSION] [--docker] 
+       [--subject SUBJECT] [--session SESSION] [--docker]
        [--singularity] [--n_procs N_PROCS] [--skip_bids_validator] 
        [--version] [--placement PLACEMENT] [--remove_existing] 
-       input_dir
+       [--excludesubject] input_dir
 
 PetDeface
 
@@ -67,6 +67,8 @@ options:
                         w/ defaced at input_dir
                         'derivatives': does all of the defacing within the derivatives folder in input_dir.
   --remove_existing, -r Remove existing output files in output_dir.
+  --excludesubject EXCLUDESUBJECT [EXCLUDESUBJECT ...]
+                        Exclude a subject(s) from the defacing workflow. e.g. --excludesubject sub-01 sub-02
 ```
 
 Working example usage:

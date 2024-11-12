@@ -113,6 +113,8 @@ Additional options can be found in the help menu::
                             e.g. replaces faced PET and T1w images w/ defaced at input_dir'derivatives': does all of the defacing within the derivatives folder in input_dir.
     --remove_existing, -r
                             Remove existing output files in output_dir.
+    --excludesubject EXCLUDESUBJECT [EXCLUDESUBJECT ...]
+                        Exclude a subject(s) from the defacing workflow. e.g. --excludesubject sub-01 sub-02
 
 Docker Based
 ------------

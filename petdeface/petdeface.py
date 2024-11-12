@@ -223,12 +223,42 @@ def deface(args: Union[dict, argparse.Namespace]) -> None:
     if not check_valid_fs_license() and not locate_freesurfer_license().exists():
         raise Exception("You need a valid FreeSurfer license to proceed!")
 
-    if args.participant_label:
-        participants = [args.participant_label]
-    else:
+    if args.subject:
+        subjects = args.subject
+        # if subject contains the string sub-, remove it to avoid redundancy as pybids will add it uses the
+        # right side of the sub- string as the subject label
+        if any("sub-" in subject for subject in subjects):
+            print("One or more subject contains sub- string")
+        subjects = [
+            subject.replace("sub-", "") for subject in subjects if "sub-" in subject
+        ]
+        # raise error if a supplied subject is not contained in the dataset
         participants = collect_participants(
             args.bids_dir, bids_validate=~args.skip_bids_validator
         )
+        for subject in subjects:
+            if subject not in participants:
+                raise FileNotFoundError(
+                    f"sub-{subject} not found in dataset {args.bids_dir}"
+                )
+    else:
+        subjects = collect_participants(
+            args.bids_dir, bids_validate=~args.skip_bids_validator
+        )
+
+    # check to see if any subjects are excluded from the defacing workflow
+    if args.excludesubject != []:
+        print(
+            f"Removing the following subjects {args.excludesubject} from the defacing workflow"
+        )
+        args.excludesubject = [
+            subject.replace("sub-", "") for subject in args.excludesubject
+        ]
+        subjects = [
+            subject for subject in subjects if subject not in args.excludesubject
+        ]
+
+        print(f"Subjects remaining in the defacing workflow: {subjects}")
 
     # clean up and create derivatives directories
     if args.output_dir == "None" or args.output_dir is None:
@@ -238,7 +268,7 @@ def deface(args: Union[dict, argparse.Namespace]) -> None:
 
     petdeface_wf = Workflow(name="petdeface_wf", base_dir=output_dir)
 
-    for subject_id in participants:
+    for subject_id in subjects:
         try:
             single_subject_wf = init_single_subject_wf(
                 subject_id, args.bids_dir, preview_pics=args.preview_pics
@@ -290,6 +320,8 @@ def init_single_subject_wf(
 
     data = collect_anat_and_pet(bids_data)
     subject_data = data.get(subject_id)
+    if subject_data is None:
+        raise FileNotFoundError(f"Could not find data for subject sub-{subject_id}")
 
     # check if any t1w images exist for the pet images
     for pet_image, t1w_image in subject_data.items():
@@ -694,6 +726,7 @@ class PetDeface:
         remove_existing=True,  # TODO: currently not implemented
         placement="adjacent",  # TODO: currently not implemented
         preview_pics=True,
+        excludesubject=[],
     ):
         self.bids_dir = bids_dir
         self.remove_existing = remove_existing
@@ -705,6 +738,7 @@ class PetDeface:
         self.n_procs = n_procs
         self.skip_bids_validator = skip_bids_validator
         self.preview_pics = preview_pics
+        self.excludesubject = excludesubject
 
         # check if freesurfer license is valid
         self.fs_license = check_valid_fs_license()
@@ -733,6 +767,7 @@ class PetDeface:
                 "placement": self.placement,
                 "remove_existing": self.remove_existing,
                 "preview_pics": self.preview_pics,
+                "excludesubject": self.excludesubject,
             }
         )
         wrap_up_defacing(
@@ -772,6 +807,7 @@ def cli():
         "-s",
         help="The label of the subject to be processed.",
         type=str,
+        nargs="+",
         required=False,
         default="",
     )
@@ -832,6 +868,14 @@ def cli():
         help="Create preview pictures of defacing, defaults to false for docker",
         action="store_true",
         default=False,
+    )
+    parser.add_argument(
+        "--excludesubject",
+        help="Exclude a subject(s) from the defacing workflow. e.g. --excludesubject sub-01 sub-02",
+        type=str,
+        nargs="+",
+        required=False,
+        default=[],
     )
 
     arguments = parser.parse_args()
@@ -1023,6 +1067,7 @@ def main():  # noqa: max-complexity: 12
             remove_existing=args.remove_existing,
             placement=args.placement,
             preview_pics=args.preview_pics,
+            excludesubject=args.excludesubject,
         )
         petdeface.run()
 
