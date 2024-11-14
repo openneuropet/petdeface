@@ -223,8 +223,8 @@ def deface(args: Union[dict, argparse.Namespace]) -> None:
     if not check_valid_fs_license() and not locate_freesurfer_license().exists():
         raise Exception("You need a valid FreeSurfer license to proceed!")
 
-    if args.subject:
-        subjects = args.subject
+    if args.participant_label:
+        subjects = args.participant_label
         # if subject contains the string sub-, remove it to avoid redundancy as pybids will add it uses the
         # right side of the sub- string as the subject label
         if any("sub-" in subject for subject in subjects):
@@ -247,15 +247,15 @@ def deface(args: Union[dict, argparse.Namespace]) -> None:
         )
 
     # check to see if any subjects are excluded from the defacing workflow
-    if args.excludesubject != []:
+    if args.excludeparticipant != []:
         print(
-            f"Removing the following subjects {args.excludesubject} from the defacing workflow"
+            f"Removing the following subjects {args.excludeparticipant} from the defacing workflow"
         )
-        args.excludesubject = [
-            subject.replace("sub-", "") for subject in args.excludesubject
+        args.excludeparticipant = [
+            subject.replace("sub-", "") for subject in args.excludeparticipant
         ]
         subjects = [
-            subject for subject in subjects if subject not in args.excludesubject
+            subject for subject in subjects if subject not in args.excludeparticipant
         ]
 
         print(f"Subjects remaining in the defacing workflow: {subjects}")
@@ -540,7 +540,7 @@ def wrap_up_defacing(
     :param path_to_dataset: Path to original dataset
     :type path_to_dataset: path like object (str or pathlib.Path)
     :param output_dir: Specific directory to place output, arguably redundant given placemnent, defaults to
-        input_dir/derivatives/petdeface
+        bids_dir/derivatives/petdeface
     :type output_dir: path like object (str or pathlib.Path), optional
     :param placement:  str, optional
         Can be one of three values
@@ -726,7 +726,7 @@ class PetDeface:
         remove_existing=True,  # TODO: currently not implemented
         placement="adjacent",  # TODO: currently not implemented
         preview_pics=True,
-        excludesubject=[],
+        excludeparticipant=[],
     ):
         self.bids_dir = bids_dir
         self.remove_existing = remove_existing
@@ -738,7 +738,7 @@ class PetDeface:
         self.n_procs = n_procs
         self.skip_bids_validator = skip_bids_validator
         self.preview_pics = preview_pics
-        self.excludesubject = excludesubject
+        self.excludeparticipant = excludeparticipant
 
         # check if freesurfer license is valid
         self.fs_license = check_valid_fs_license()
@@ -767,7 +767,7 @@ class PetDeface:
                 "placement": self.placement,
                 "remove_existing": self.remove_existing,
                 "preview_pics": self.preview_pics,
-                "excludesubject": self.excludesubject,
+                "excludeparticipant": self.excludeparticipant,
             }
         )
         wrap_up_defacing(
@@ -785,15 +785,21 @@ def cli():
     parser = argparse.ArgumentParser(description="PetDeface")
 
     parser.add_argument(
-        "input_dir", help="The directory with the input dataset", type=pathlib.Path
+        "bids_dir", help="The directory with the input dataset", type=pathlib.Path
     )
     parser.add_argument(
-        "--output_dir",
-        "-o",
-        help="The directory where the output files should be stored",
+        "output_dir",
+        nargs="?",
+        help="The directory where the output files should be stored, if not supplied will default to <bids_dir>/derivatives/petdeface",
         type=pathlib.Path,
-        required=False,
         default=None,
+    )
+    parser.add_argument(
+        'analysis_level',
+        nargs='?',
+        default='participant',
+        help="This BIDS app always operates at the participant level, if this argument is changed it will be ignored and run as "
+        "a participant level analysis",
     )
     parser.add_argument(
         "--anat_only",
@@ -803,9 +809,9 @@ def cli():
         help="Only deface anatomical images",
     )
     parser.add_argument(
-        "--subject",
-        "-s",
-        help="The label of the subject to be processed.",
+        "--participant_label",
+        "-pl",
+        help="The label(s) of the participant/subject to be processed. When specifying multiple subjects separate them with spaces.",
         type=str,
         nargs="+",
         required=False,
@@ -849,9 +855,9 @@ def cli():
         "--placement",
         "-p",
         help="Where to place the defaced images. Options are "
-        "'adjacent': next to the input_dir (default) in a folder appended with _defaced"
-        "'inplace': defaces the dataset in place, e.g. replaces faced PET and T1w images w/ defaced at input_dir"
-        "'derivatives': does all of the defacing within the derivatives folder in input_dir.",
+        "'adjacent': next to the bids_dir (default) in a folder appended with _defaced"
+        "'inplace': defaces the dataset in place, e.g. replaces faced PET and T1w images w/ defaced at bids_dir"
+        "'derivatives': does all of the defacing within the derivatives folder in bids_dir.",
         type=str,
         required=False,
         default="adjacent",
@@ -870,8 +876,8 @@ def cli():
         default=False,
     )
     parser.add_argument(
-        "--excludesubject",
-        help="Exclude a subject(s) from the defacing workflow. e.g. --excludesubject sub-01 sub-02",
+        "--excludeparticipant",
+        help="Exclude a subject(s) from the defacing workflow. e.g. --excludeparticipant sub-01 sub-02",
         type=str,
         nargs="+",
         required=False,
@@ -900,10 +906,10 @@ def main():  # noqa: max-complexity: 12
 
     args = cli()
 
-    if isinstance(args.input_dir, pathlib.PosixPath) and "~" in str(args.input_dir):
-        args.input_dir = args.input_dir.expanduser().resolve()
+    if isinstance(args.bids_dir, pathlib.PosixPath) and "~" in str(args.bids_dir):
+        args.bids_dir = args.bids_dir.expanduser().resolve()
     else:
-        args.input_dir = args.input_dir.absolute()
+        args.bids_dir = args.bids_dir.absolute()
     if isinstance(args.output_dir, pathlib.PosixPath) and "~" in str(args.output_dir):
         args.output_dir = args.output_dir.expanduser().resolve()
     else:
@@ -920,22 +926,22 @@ def main():  # noqa: max-complexity: 12
         gid = os.getegid()
         system_platform = system()
 
-        input_mount_point = str(args.input_dir)
+        input_mount_point = str(args.bids_dir)
         output_mount_point = str(args.output_dir)
 
         if output_mount_point == "None" or output_mount_point is None:
-            output_mount_point = str(args.input_dir / "derivatives" / "petdeface")
+            output_mount_point = str(args.bids_dir / "derivatives" / "petdeface")
 
         # create output directory if it doesn't exist
         if not pathlib.Path(output_mount_point).exists():
             pathlib.Path(output_mount_point).mkdir(parents=True, exist_ok=True)
         subprocess.run(f"chown -R {uid}:{gid} {str(output_mount_point)}", shell=True)
 
-        args.input_dir = pathlib.Path("/input")
+        args.bids_dir = pathlib.Path("/input")
         args.output_dir = pathlib.Path("/output")
         print(
             "Attempting to run in docker container, mounting {} to {} and {} to {}".format(
-                input_mount_point, args.input_dir, output_mount_point, args.output_dir
+                input_mount_point, args.bids_dir, output_mount_point, args.output_dir
             )
         )
         # convert args to dictionary
@@ -957,9 +963,9 @@ def main():  # noqa: max-complexity: 12
         )
         args_string = args_string.replace("empty_str", "")
 
-        # remove --input_dir from args_string as input dir is positional, we
+        # remove --bids_dir from args_string as input dir is positional, we
         # we're simply removing an artifact of argparse
-        args_string = args_string.replace("--input_dir", "")
+        args_string = args_string.replace("--bids_dir", "")
 
         # invoke docker run command to run petdeface in container, while redirecting stdout and stderr to terminal
         docker_command = f"docker run "
@@ -969,7 +975,7 @@ def main():  # noqa: max-complexity: 12
 
         docker_command += (
             f"-a stderr -a stdout --rm "
-            f"-v {input_mount_point}:{args.input_dir} "
+            f"-v {input_mount_point}:{args.bids_dir} "
             f"-v {output_mount_point}:{args.output_dir} "
         )
         if code_dir:
@@ -1005,7 +1011,7 @@ def main():  # noqa: max-complexity: 12
         singularity_command = f"singularity exec -e"
 
         if args.output_dir == "None" or args.output_dir is None or args.output_dir == "":
-            args.output_dir = args.input_dir / "derivatives" / "petdeface"
+            args.output_dir = args.bids_dir / "derivatives" / "petdeface"
 
         # create output directory if it doesn't exist
         if not args.output_dir.exists():
@@ -1030,9 +1036,9 @@ def main():  # noqa: max-complexity: 12
         )
         args_string = args_string.replace("empty_str", "")
 
-        # remove --input_dir from args_string as input dir is positional, we
+        # remove --bids_dir from args_string as input dir is positional, we
         # we're simply removing an artifact of argparse
-        args_string = args_string.replace("--input_dir", "")
+        args_string = args_string.replace("--bids_dir", "")
 
         # collect location of freesurfer license if it's installed and working
         try:
@@ -1057,17 +1063,17 @@ def main():  # noqa: max-complexity: 12
 
     else:
         petdeface = PetDeface(
-            bids_dir=args.input_dir,
+            bids_dir=args.bids_dir,
             output_dir=args.output_dir,
             anat_only=args.anat_only,
-            subject=args.subject,
+            subject=args.participant_label,
             session=args.session,
             n_procs=args.n_procs,
             skip_bids_validator=args.skip_bids_validator,
             remove_existing=args.remove_existing,
             placement=args.placement,
             preview_pics=args.preview_pics,
-            excludesubject=args.excludesubject,
+            excludeparticipant=args.excludeparticipant,
         )
         petdeface.run()
 
