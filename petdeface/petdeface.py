@@ -341,10 +341,14 @@ def init_single_subject_wf(
     if subject_data is None:
         raise FileNotFoundError(f"Could not find data for subject sub-{subject_id}")
 
-    # we combine the sessions to include and exclude into a single set of sessions to exclude from 
+    # we combine the sessions to include and exclude into a single set of sessions to exclude from
     # the set of all sessions
     if session:
-        sessions_to_exclude = list(set(bids_data.get_sessions()) - (set(bids_data.get_sessions()) & set(session)) | set(exclude_session))
+        sessions_to_exclude = list(
+            set(bids_data.get_sessions())
+            - (set(bids_data.get_sessions()) & set(session))
+            | set(exclude_session)
+        )
     else:
         sessions_to_exclude = exclude_session
 
@@ -918,8 +922,22 @@ def cli():
         required=False,
         default=[],
     )
-    parser.add_argument("--session", help="Select only a specific session(s) to include in the defacing workflow", type=str, nargs="+", required=False, default=[])
-    parser.add_argument("--exclude_session", help="Select a specific session(s) to exclude from the defacing workflow", type=str, nargs="+", required=False, default=[])
+    parser.add_argument(
+        "--session",
+        help="Select only a specific session(s) to include in the defacing workflow",
+        type=str,
+        nargs="+",
+        required=False,
+        default=[],
+    )
+    parser.add_argument(
+        "--exclude_session",
+        help="Select a specific session(s) to exclude from the defacing workflow",
+        type=str,
+        nargs="+",
+        required=False,
+        default=[],
+    )
 
     arguments = parser.parse_args()
     return arguments
