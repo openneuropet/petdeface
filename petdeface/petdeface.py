@@ -52,7 +52,9 @@ __bids_version__ = "1.8.0"
 for place in places_to_look:
     for root, folders, files in os.walk(place):
         for file in files:
-            if file.endswith("pyproject.toml") and "petdeface" in os.path.join(root, file):
+            if file.endswith("pyproject.toml") and "petdeface" in os.path.join(
+                root, file
+            ):
                 toml_file = os.path.join(root, file)
 
                 with open(toml_file, "r") as f:
@@ -71,12 +73,12 @@ for place in places_to_look:
                 # we check the version with a regex expression to see if all of the parts are there
                 if re.match(r"\d+\.\d+\.\d+", __version__):
                     break
-            
+
             if __version__ != "unable to locate version number in pyproject.toml":
-                    # we try to load the version using import lib
-                    __version__ = importlib.metadata.version("petdeface")
-                    if re.match(r"\d+\.\d+\.\d+", __version__):
-                        break
+                # we try to load the version using import lib
+                __version__ = importlib.metadata.version("petdeface")
+                if re.match(r"\d+\.\d+\.\d+", __version__):
+                    break
 
 
 def locate_freesurfer_license():
@@ -101,7 +103,7 @@ def locate_freesurfer_license():
         else:
             return fs_license_env_var
     else:
-    # collect freesurfer home environment variable and look there instead
+        # collect freesurfer home environment variable and look there instead
         fs_home = pathlib.Path(os.environ.get("FREESURFER_HOME", ""))
         if not fs_home:
             raise ValueError(
@@ -271,7 +273,10 @@ def deface(args: Union[dict, argparse.Namespace]) -> None:
     for subject_id in subjects:
         try:
             single_subject_wf = init_single_subject_wf(
-                subject_id, args.bids_dir, preview_pics=args.preview_pics
+                subject_id,
+                args.bids_dir,
+                preview_pics=args.preview_pics,
+                anat_only=args.anat_only,
             )
         except FileNotFoundError:
             single_subject_wf = None
@@ -294,9 +299,10 @@ def deface(args: Union[dict, argparse.Namespace]) -> None:
 
 def init_single_subject_wf(
     subject_id: str,
-    bids_data: [pathlib.Path, BIDSLayout],
+    bids_data: Union[pathlib.Path, BIDSLayout],
     output_dir: pathlib.Path = None,
     preview_pics=False,
+    anat_only=False,
 ) -> Workflow:
     """
     Organize the preprocessing pipeline for a single subject.
@@ -307,6 +313,10 @@ def init_single_subject_wf(
     :type bids_data: pathlib.Path, BIDSLayout]
     :param output_dir: _description_, defaults to None
     :type output_dir: pathlib.Path, optional
+    :param preview_pics: _description_, defaults to False
+    :type preview_pics: bool, optional
+    :param anat_only: _description_, defaults to False
+    :type anat_only: bool, optional
     :raises FileNotFoundError: _description_
     :return: _description_
     :rtype: Workflow
@@ -404,71 +414,80 @@ def init_single_subject_wf(
         t1w_workflows[t1w_file] = {"workflow": t1w_wf, "anat_string": anat_string}
 
     workflow = Workflow(name=name)
-    for pet_file, t1w_file in subject_data.items():
-        try:
-            ses_id = re.search("ses-[^_|\/]*", str(pet_file)).group(0)
-            pet_string = f"sub-{subject_id}_{ses_id}"
-        except AttributeError:
-            ses_id = ""
-            pet_string = f"sub-{subject_id}"
+    if anat_only:
+        for each in t1w_workflows.values():
+            workflow.add_nodes([each["workflow"]])
+    else:
+        for pet_file, t1w_file in subject_data.items():
+            try:
+                ses_id = re.search("ses-[^_|\/]*", str(pet_file)).group(0)
+                pet_string = f"sub-{subject_id}_{ses_id}"
+            except AttributeError:
+                ses_id = ""
+                pet_string = f"sub-{subject_id}"
 
-        # collect run info from pet file
-        try:
-            run_id = "_" + re.search("run-[^_|\/]*", str(pet_file)).group(0)
-        except AttributeError:
-            run_id = ""
-        pet_wf_name = f"pet_{pet_string}{run_id}_wf"
-        pet_wf = Workflow(name=pet_wf_name)
+            # collect run info from pet file
+            try:
+                run_id = "_" + re.search("run-[^_|\/]*", str(pet_file)).group(0)
+            except AttributeError:
+                run_id = ""
+            pet_wf_name = f"pet_{pet_string}{run_id}_wf"
+            pet_wf = Workflow(name=pet_wf_name)
 
-        weighted_average = Node(
-            WeightedAverage(pet_file=pet_file), name="weighted_average"
-        )
+            weighted_average = Node(
+                WeightedAverage(pet_file=pet_file), name="weighted_average"
+            )
 
-        # rename registration file to something more descriptive than registration.lta
-        # we do this here to account for mulitple runs during the same session
-        mricoreg = MRICoreg(reference_file=t1w_file)
-        mricoreg.inputs.out_lta_file = f"{pet_string}{run_id}_desc-pet2anat_pet.lta"
+            # rename registration file to something more descriptive than registration.lta
+            # we do this here to account for mulitple runs during the same session
+            mricoreg = MRICoreg(reference_file=t1w_file)
+            mricoreg.inputs.out_lta_file = f"{pet_string}{run_id}_desc-pet2anat_pet.lta"
 
-        coreg_pet_to_t1w = Node(mricoreg, "coreg_pet_to_t1w")
+            coreg_pet_to_t1w = Node(mricoreg, "coreg_pet_to_t1w")
 
-        deface_pet = Node(ApplyMideface(in_file=pet_file), name="deface_pet")
+            deface_pet = Node(ApplyMideface(in_file=pet_file), name="deface_pet")
 
-        pet_wf.connect(
-            [
-                (weighted_average, coreg_pet_to_t1w, [("out_file", "source_file")]),
-                (coreg_pet_to_t1w, deface_pet, [("out_lta_file", "lta_file")]),
-                (
-                    coreg_pet_to_t1w,
-                    datasink,
-                    [("out_lta_file", f"{pet_string.replace('_', '.')}.pet.@{run_id}")],
-                ),
-                (
-                    deface_pet,
-                    datasink,
-                    [
-                        (
-                            "out_file",
-                            f"{pet_string.replace('_', '.')}.pet.@defaced{run_id}",
-                        )
-                    ],
-                ),
-            ]
-        )
+            pet_wf.connect(
+                [
+                    (weighted_average, coreg_pet_to_t1w, [("out_file", "source_file")]),
+                    (coreg_pet_to_t1w, deface_pet, [("out_lta_file", "lta_file")]),
+                    (
+                        coreg_pet_to_t1w,
+                        datasink,
+                        [
+                            (
+                                "out_lta_file",
+                                f"{pet_string.replace('_', '.')}.pet.@{run_id}",
+                            )
+                        ],
+                    ),
+                    (
+                        deface_pet,
+                        datasink,
+                        [
+                            (
+                                "out_file",
+                                f"{pet_string.replace('_', '.')}.pet.@defaced{run_id}",
+                            )
+                        ],
+                    ),
+                ]
+            )
 
-        workflow.connect(
-            [
-                (
-                    t1w_workflows[t1w_file]["workflow"],
-                    pet_wf,
-                    [
-                        (
-                            f"deface_t1w_{t1w_workflows[t1w_file]['anat_string']}.out_facemask",
-                            "deface_pet.facemask",
-                        )
-                    ],
-                )
-            ]
-        )
+            workflow.connect(
+                [
+                    (
+                        t1w_workflows[t1w_file]["workflow"],
+                        pet_wf,
+                        [
+                            (
+                                f"deface_t1w_{t1w_workflows[t1w_file]['anat_string']}.out_facemask",
+                                "deface_pet.facemask",
+                            )
+                        ],
+                    )
+                ]
+            )
 
     return workflow
 
@@ -718,13 +737,12 @@ class PetDeface:
         self,
         bids_dir,
         output_dir=None,
-        anat_only=False,  # TODO: currently not implemented
+        anat_only=False,
         subject="",
-        session="",  # TODO: currently not implemented
         n_procs=2,
         skip_bids_validator=True,
-        remove_existing=True,  # TODO: currently not implemented
-        placement="adjacent",  # TODO: currently not implemented
+        remove_existing=True,
+        placement="adjacent",
         preview_pics=True,
         excludeparticipant=[],
     ):
@@ -734,7 +752,6 @@ class PetDeface:
         self.output_dir = output_dir
         self.anat_only = anat_only
         self.subject = subject
-        self.session = session
         self.n_procs = n_procs
         self.skip_bids_validator = skip_bids_validator
         self.preview_pics = preview_pics
@@ -747,7 +764,9 @@ class PetDeface:
             if not self.fs_license.exists():
                 raise ValueError("Freesurfer license is not valid")
             else:
-                print(f"Using freesurfer license at {self.fs_license} found in system env at $FREESURFER_LICENSE")
+                print(
+                    f"Using freesurfer license at {self.fs_license} found in system env at $FREESURFER_LICENSE"
+                )
 
     def run(self):
         """
@@ -760,7 +779,6 @@ class PetDeface:
                 "output_dir": self.output_dir,
                 "anat_only": self.anat_only,
                 "subject": self.subject,
-                "session": self.session,
                 "n_procs": self.n_procs,
                 "skip_bids_validator": self.skip_bids_validator,
                 "participant_label": self.subject,
@@ -795,9 +813,9 @@ def cli():
         default=None,
     )
     parser.add_argument(
-        'analysis_level',
-        nargs='?',
-        default='participant',
+        "analysis_level",
+        nargs="?",
+        default="participant",
         help="This BIDS app always operates at the participant level, if this argument is changed it will be ignored and run as "
         "a participant level analysis",
     )
@@ -814,14 +832,6 @@ def cli():
         help="The label(s) of the participant/subject to be processed. When specifying multiple subjects separate them with spaces.",
         type=str,
         nargs="+",
-        required=False,
-        default="",
-    )
-    parser.add_argument(
-        "--session",
-        "-ses",
-        help="The label of the session to be processed.",
-        type=str,
         required=False,
         default="",
     )
@@ -1010,7 +1020,11 @@ def main():  # noqa: max-complexity: 12
     elif args.singularity:
         singularity_command = f"singularity exec -e"
 
-        if args.output_dir == "None" or args.output_dir is None or args.output_dir == "":
+        if (
+            args.output_dir == "None"
+            or args.output_dir is None
+            or args.output_dir == ""
+        ):
             args.output_dir = args.bids_dir / "derivatives" / "petdeface"
 
         # create output directory if it doesn't exist
@@ -1051,7 +1065,9 @@ def main():  # noqa: max-complexity: 12
                     "Freesurfer license not found, please set FREESURFER_LICENSE environment variable or place license.txt in FREESURFER_HOME"
                 )
 
-        singularity_command += f" --bind {str(license_location)}:/opt/freesurfer/license.txt"
+        singularity_command += (
+            f" --bind {str(license_location)}:/opt/freesurfer/license.txt"
+        )
         singularity_command += f" docker://openneuropet/petdeface:{__version__}"
         singularity_command += f" petdeface"
         singularity_command += args_string
@@ -1060,14 +1076,12 @@ def main():  # noqa: max-complexity: 12
 
         subprocess.run(singularity_command, shell=True)
 
-
     else:
         petdeface = PetDeface(
             bids_dir=args.bids_dir,
             output_dir=args.output_dir,
             anat_only=args.anat_only,
             subject=args.participant_label,
-            session=args.session,
             n_procs=args.n_procs,
             skip_bids_validator=args.skip_bids_validator,
             remove_existing=args.remove_existing,
