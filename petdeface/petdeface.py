@@ -249,15 +249,15 @@ def deface(args: Union[dict, argparse.Namespace]) -> None:
         )
 
     # check to see if any subjects are excluded from the defacing workflow
-    if args.excludeparticipant != []:
+    if args.exclude_participant != []:
         print(
-            f"Removing the following subjects {args.excludeparticipant} from the defacing workflow"
+            f"Removing the following subjects {args.exclude_participant} from the defacing workflow"
         )
-        args.excludeparticipant = [
-            subject.replace("sub-", "") for subject in args.excludeparticipant
+        args.exclude_participant = [
+            subject.replace("sub-", "") for subject in args.exclude_participant
         ]
         subjects = [
-            subject for subject in subjects if subject not in args.excludeparticipant
+            subject for subject in subjects if subject not in args.exclude_participant
         ]
 
         print(f"Subjects remaining in the defacing workflow: {subjects}")
@@ -277,6 +277,8 @@ def deface(args: Union[dict, argparse.Namespace]) -> None:
                 args.bids_dir,
                 preview_pics=args.preview_pics,
                 anat_only=args.anat_only,
+                session=args.session,
+                exclude_session=args.exclude_session,
             )
         except FileNotFoundError:
             single_subject_wf = None
@@ -303,6 +305,8 @@ def init_single_subject_wf(
     output_dir: pathlib.Path = None,
     preview_pics=False,
     anat_only=False,
+    session=[],
+    exclude_session=[],
 ) -> Workflow:
     """
     Organize the preprocessing pipeline for a single subject.
@@ -317,6 +321,10 @@ def init_single_subject_wf(
     :type preview_pics: bool, optional
     :param anat_only: _description_, defaults to False
     :type anat_only: bool, optional
+    :param session: _description_, will default to only selecting session(s) supplied to this argument, defaults to []
+    :type session: list, optional
+    :param exclude_session: _description_, will exclude any session(s) supplied to this argument, defaults to []
+    :type exclude_session: list, optional
     :raises FileNotFoundError: _description_
     :return: _description_
     :rtype: Workflow
@@ -332,6 +340,13 @@ def init_single_subject_wf(
     subject_data = data.get(subject_id)
     if subject_data is None:
         raise FileNotFoundError(f"Could not find data for subject sub-{subject_id}")
+
+    # we combine the sessions to include and exclude into a single set of sessions to exclude from 
+    # the set of all sessions
+    if session:
+        sessions_to_exclude = list(set(bids_data.get_sessions()) - (set(bids_data.get_sessions()) & set(session)) | set(exclude_session))
+    else:
+        sessions_to_exclude = exclude_session
 
     # check if any t1w images exist for the pet images
     for pet_image, t1w_image in subject_data.items():
@@ -425,6 +440,10 @@ def init_single_subject_wf(
             except AttributeError:
                 ses_id = ""
                 pet_string = f"sub-{subject_id}"
+
+            # skip anything in the exclude list
+            if ses_id.replace("ses-", "") in sessions_to_exclude:
+                continue
 
             # collect run info from pet file
             try:
@@ -744,7 +763,9 @@ class PetDeface:
         remove_existing=True,
         placement="adjacent",
         preview_pics=True,
-        excludeparticipant=[],
+        exclude_participant=[],
+        session=[],
+        exclude_session=[],
     ):
         self.bids_dir = bids_dir
         self.remove_existing = remove_existing
@@ -755,7 +776,9 @@ class PetDeface:
         self.n_procs = n_procs
         self.skip_bids_validator = skip_bids_validator
         self.preview_pics = preview_pics
-        self.excludeparticipant = excludeparticipant
+        self.exclude_participant = exclude_participant
+        self.session = session
+        self.exclude_session = exclude_session
 
         # check if freesurfer license is valid
         self.fs_license = check_valid_fs_license()
@@ -785,7 +808,9 @@ class PetDeface:
                 "placement": self.placement,
                 "remove_existing": self.remove_existing,
                 "preview_pics": self.preview_pics,
-                "excludeparticipant": self.excludeparticipant,
+                "exclude_participant": self.exclude_participant,
+                "session": self.session,
+                "exclude_session": self.exclude_session,
             }
         )
         wrap_up_defacing(
@@ -886,13 +911,15 @@ def cli():
         default=False,
     )
     parser.add_argument(
-        "--excludeparticipant",
-        help="Exclude a subject(s) from the defacing workflow. e.g. --excludeparticipant sub-01 sub-02",
+        "--exclude_participant",
+        help="Exclude a subject(s) from the defacing workflow. e.g. --exclude_participant sub-01 sub-02",
         type=str,
         nargs="+",
         required=False,
         default=[],
     )
+    parser.add_argument("--session", help="Select only a specific session(s) to include in the defacing workflow", type=str, nargs="+", required=False, default=[])
+    parser.add_argument("--exclude_session", help="Select a specific session(s) to exclude from the defacing workflow", type=str, nargs="+", required=False, default=[])
 
     arguments = parser.parse_args()
     return arguments
@@ -1087,7 +1114,9 @@ def main():  # noqa: max-complexity: 12
             remove_existing=args.remove_existing,
             placement=args.placement,
             preview_pics=args.preview_pics,
-            excludeparticipant=args.excludeparticipant,
+            exclude_participant=args.exclude_participant,
+            session=args.session,
+            exclude_session=args.exclude_session,
         )
         petdeface.run()
 

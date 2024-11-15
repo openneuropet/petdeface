@@ -86,37 +86,43 @@ The number of processors made available to PETdeface can be set by the `--n_proc
 Additional options can be found in the help menu::
 
     petdeface -h
-    usage: petdeface.py [-h] [--anat_only] [--participant_label PARTICIPANT_LABEL [PARTICIPANT_LABEL ...]] [--session SESSION] [--docker] [--singularity] [--n_procs N_PROCS] [--skip_bids_validator] [--version] [--placement PLACEMENT] [--remove_existing] [--preview_pics]
-                    [--excludeparticipant EXCLUDEPARTICIPANT [EXCLUDEPARTICIPANT ...]]
+    usage: petdeface.py [-h] [--anat_only] [--participant_label PARTICIPANT_LABEL [PARTICIPANT_LABEL ...]] [--docker] [--singularity] [--n_procs N_PROCS]
+                    [--skip_bids_validator] [--version] [--placement PLACEMENT] [--remove_existing] [--preview_pics]
+                    [--exclude_participant EXCLUDE_PARTICIPANT [EXCLUDE_PARTICIPANT ...]] [--session SESSION [SESSION ...]]
+                    [--exclude_session EXCLUDE_SESSION [EXCLUDE_SESSION ...]]
                     bids_dir [output_dir] [analysis_level]
 
-    PetDeface
+PetDeface
 
-    positional arguments:
-    bids_dir              The directory with the input dataset
-    output_dir            The directory where the output files should be stored, if not supplied will default to <bids_dir>/derivatives/petdeface
-    analysis_level        This BIDS app always operates at the participant level, if this argument is changed it will be ignored and run as a participant level analysis
+positional arguments:
+  bids_dir              The directory with the input dataset
+  output_dir            The directory where the output files should be stored, if not supplied will default to <bids_dir>/derivatives/petdeface
+  analysis_level        This BIDS app always operates at the participant level, if this argument is changed it will be ignored and run as a participant level
+                        analysis
 
-    options:
-    -h, --help            show this help message and exit
-    --anat_only, -a       Only deface anatomical images
-    --participant_label PARTICIPANT_LABEL [PARTICIPANT_LABEL ...], -pl PARTICIPANT_LABEL [PARTICIPANT_LABEL ...]
-                            The label(s) of the participant/subject to be processed. When specifying multiple subjects separate them with spaces.
-    --session SESSION, -ses SESSION
-                            The label of the session to be processed.
-    --docker, -d          Run in docker container
-    --singularity, -si    Run in singularity container
-    --n_procs N_PROCS     Number of processors to use when running the workflow
-    --skip_bids_validator
-    --version, -v         show program's version number and exit
-    --placement PLACEMENT, -p PLACEMENT
-                            Where to place the defaced images. Options are 'adjacent': next to the bids_dir (default) in a folder appended with _defaced'inplace': defaces the dataset in place, e.g. replaces faced PET and T1w images w/ defaced at bids_dir'derivatives': does all of the
-                            defacing within the derivatives folder in bids_dir.
-    --remove_existing, -r
-                            Remove existing output files in output_dir.
-    --preview_pics        Create preview pictures of defacing, defaults to false for docker
-    --excludeparticipant EXCLUDEPARTICIPANT [EXCLUDEPARTICIPANT ...]
-                            Exclude a subject(s) from the defacing workflow. e.g. --excludeparticipant sub-01 sub-02
+options:
+  -h, --help            show this help message and exit
+  --anat_only, -a       Only deface anatomical images
+  --participant_label PARTICIPANT_LABEL [PARTICIPANT_LABEL ...], -pl PARTICIPANT_LABEL [PARTICIPANT_LABEL ...]
+                        The label(s) of the participant/subject to be processed. When specifying multiple subjects separate them with spaces.
+  --docker, -d          Run in docker container
+  --singularity, -si    Run in singularity container
+  --n_procs N_PROCS     Number of processors to use when running the workflow
+  --skip_bids_validator
+  --version, -v         show program's version number and exit
+  --placement PLACEMENT, -p PLACEMENT
+                        Where to place the defaced images. Options are 'adjacent': next to the bids_dir (default) in a folder appended with _defaced'inplace':
+                        defaces the dataset in place, e.g. replaces faced PET and T1w images w/ defaced at bids_dir'derivatives': does all of the defacing within
+                        the derivatives folder in bids_dir.
+  --remove_existing, -r
+                        Remove existing output files in output_dir.
+  --preview_pics        Create preview pictures of defacing, defaults to false for docker
+  --exclude_participant EXCLUDE_PARTICIPANT [EXCLUDE_PARTICIPANT ...]
+                        Exclude a subject(s) from the defacing workflow. e.g. --exclude_participant sub-01 sub-02
+  --session SESSION [SESSION ...]
+                        Select only a specific session(s) to include in the defacing workflow
+  --exclude_session EXCLUDE_SESSION [EXCLUDE_SESSION ...]
+                        Select a specific session(s) to exclude from the defacing workflow
 
 Docker Based
 ------------
