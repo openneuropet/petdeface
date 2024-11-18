@@ -37,8 +37,8 @@ This software can be installed via source or via pip from PyPi with `pip install
 ```bash
 usage: petdeface.py [-h] [--anat_only] [--participant_label PARTICIPANT_LABEL [PARTICIPANT_LABEL ...]] [--docker] [--singularity] [--n_procs N_PROCS]
                     [--skip_bids_validator] [--version] [--placement PLACEMENT] [--remove_existing] [--preview_pics]
-                    [--exclude_participant EXCLUDE_PARTICIPANT [EXCLUDE_PARTICIPANT ...]] [--session SESSION [SESSION ...]]
-                    [--exclude_session EXCLUDE_SESSION [EXCLUDE_SESSION ...]]
+                    [--participant_label_exclude participant_label_exclude [participant_label_exclude ...]] [--session_label SESSION [SESSION ...]]
+                    [--session_label_exclude session_label_exclude [session_label_exclude ...]]
                     bids_dir [output_dir] [analysis_level]
 
 PetDeface
@@ -66,11 +66,11 @@ options:
   --remove_existing, -r
                         Remove existing output files in output_dir.
   --preview_pics        Create preview pictures of defacing, defaults to false for docker
-  --exclude_participant EXCLUDE_PARTICIPANT [EXCLUDE_PARTICIPANT ...]
-                        Exclude a subject(s) from the defacing workflow. e.g. --exclude_participant sub-01 sub-02
-  --session SESSION [SESSION ...]
+  --participant_label_exclude participant_label_exclude [participant_label_exclude ...]
+                        Exclude a subject(s) from the defacing workflow. e.g. --participant_label_exclude sub-01 sub-02
+  --session_label SESSION [SESSION ...]
                         Select only a specific session(s) to include in the defacing workflow
-  --exclude_session EXCLUDE_SESSION [EXCLUDE_SESSION ...]
+  --session_label_exclude session_label_exclude [session_label_exclude ...]
                         Select a specific session(s) to exclude from the defacing workflow
 ```
 
