@@ -52,7 +52,9 @@ __bids_version__ = "1.8.0"
 for place in places_to_look:
     for root, folders, files in os.walk(place):
         for file in files:
-            if file.endswith("pyproject.toml") and "petdeface" in os.path.join(root, file):
+            if file.endswith("pyproject.toml") and "petdeface" in os.path.join(
+                root, file
+            ):
                 toml_file = os.path.join(root, file)
 
                 with open(toml_file, "r") as f:
@@ -71,12 +73,12 @@ for place in places_to_look:
                 # we check the version with a regex expression to see if all of the parts are there
                 if re.match(r"\d+\.\d+\.\d+", __version__):
                     break
-            
+
             if __version__ != "unable to locate version number in pyproject.toml":
-                    # we try to load the version using import lib
-                    __version__ = importlib.metadata.version("petdeface")
-                    if re.match(r"\d+\.\d+\.\d+", __version__):
-                        break
+                # we try to load the version using import lib
+                __version__ = importlib.metadata.version("petdeface")
+                if re.match(r"\d+\.\d+\.\d+", __version__):
+                    break
 
 
 def locate_freesurfer_license():
@@ -101,7 +103,7 @@ def locate_freesurfer_license():
         else:
             return fs_license_env_var
     else:
-    # collect freesurfer home environment variable and look there instead
+        # collect freesurfer home environment variable and look there instead
         fs_home = pathlib.Path(os.environ.get("FREESURFER_HOME", ""))
         if not fs_home:
             raise ValueError(
@@ -223,8 +225,8 @@ def deface(args: Union[dict, argparse.Namespace]) -> None:
     if not check_valid_fs_license() and not locate_freesurfer_license().exists():
         raise Exception("You need a valid FreeSurfer license to proceed!")
 
-    if args.subject:
-        subjects = args.subject
+    if args.participant_label:
+        subjects = args.participant_label
         # if subject contains the string sub-, remove it to avoid redundancy as pybids will add it uses the
         # right side of the sub- string as the subject label
         if any("sub-" in subject for subject in subjects):
@@ -247,15 +249,15 @@ def deface(args: Union[dict, argparse.Namespace]) -> None:
         )
 
     # check to see if any subjects are excluded from the defacing workflow
-    if args.excludesubject != []:
+    if args.participant_label_exclude != []:
         print(
-            f"Removing the following subjects {args.excludesubject} from the defacing workflow"
+            f"Removing the following subjects {args.participant_label_exclude} from the defacing workflow"
         )
-        args.excludesubject = [
-            subject.replace("sub-", "") for subject in args.excludesubject
+        args.participant_label_exclude = [
+            subject.replace("sub-", "") for subject in args.participant_label_exclude
         ]
         subjects = [
-            subject for subject in subjects if subject not in args.excludesubject
+            subject for subject in subjects if subject not in args.participant_label_exclude
         ]
 
         print(f"Subjects remaining in the defacing workflow: {subjects}")
@@ -271,7 +273,12 @@ def deface(args: Union[dict, argparse.Namespace]) -> None:
     for subject_id in subjects:
         try:
             single_subject_wf = init_single_subject_wf(
-                subject_id, args.bids_dir, preview_pics=args.preview_pics
+                subject_id,
+                args.bids_dir,
+                preview_pics=args.preview_pics,
+                anat_only=args.anat_only,
+                session=args.session_label,
+                session_label_exclude=args.session_label_exclude,
             )
         except FileNotFoundError:
             single_subject_wf = None
@@ -294,9 +301,12 @@ def deface(args: Union[dict, argparse.Namespace]) -> None:
 
 def init_single_subject_wf(
     subject_id: str,
-    bids_data: [pathlib.Path, BIDSLayout],
+    bids_data: Union[pathlib.Path, BIDSLayout],
     output_dir: pathlib.Path = None,
     preview_pics=False,
+    anat_only=False,
+    session=[],
+    session_label_exclude=[],
 ) -> Workflow:
     """
     Organize the preprocessing pipeline for a single subject.
@@ -307,6 +317,14 @@ def init_single_subject_wf(
     :type bids_data: pathlib.Path, BIDSLayout]
     :param output_dir: _description_, defaults to None
     :type output_dir: pathlib.Path, optional
+    :param preview_pics: _description_, defaults to False
+    :type preview_pics: bool, optional
+    :param anat_only: _description_, defaults to False
+    :type anat_only: bool, optional
+    :param session: _description_, will default to only selecting session(s) supplied to this argument, defaults to []
+    :type session: list, optional
+    :param session_label_exclude: _description_, will exclude any session(s) supplied to this argument, defaults to []
+    :type session_label_exclude: list, optional
     :raises FileNotFoundError: _description_
     :return: _description_
     :rtype: Workflow
@@ -322,6 +340,17 @@ def init_single_subject_wf(
     subject_data = data.get(subject_id)
     if subject_data is None:
         raise FileNotFoundError(f"Could not find data for subject sub-{subject_id}")
+
+    # we combine the sessions to include and exclude into a single set of sessions to exclude from
+    # the set of all sessions
+    if session:
+        sessions_to_exclude = list(
+            set(bids_data.get_sessions())
+            - (set(bids_data.get_sessions()) & set(session))
+            | set(session_label_exclude)
+        )
+    else:
+        sessions_to_exclude = session_label_exclude
 
     # check if any t1w images exist for the pet images
     for pet_image, t1w_image in subject_data.items():
@@ -404,71 +433,84 @@ def init_single_subject_wf(
         t1w_workflows[t1w_file] = {"workflow": t1w_wf, "anat_string": anat_string}
 
     workflow = Workflow(name=name)
-    for pet_file, t1w_file in subject_data.items():
-        try:
-            ses_id = re.search("ses-[^_|\/]*", str(pet_file)).group(0)
-            pet_string = f"sub-{subject_id}_{ses_id}"
-        except AttributeError:
-            ses_id = ""
-            pet_string = f"sub-{subject_id}"
+    if anat_only:
+        for each in t1w_workflows.values():
+            workflow.add_nodes([each["workflow"]])
+    else:
+        for pet_file, t1w_file in subject_data.items():
+            try:
+                ses_id = re.search("ses-[^_|\/]*", str(pet_file)).group(0)
+                pet_string = f"sub-{subject_id}_{ses_id}"
+            except AttributeError:
+                ses_id = ""
+                pet_string = f"sub-{subject_id}"
 
-        # collect run info from pet file
-        try:
-            run_id = "_" + re.search("run-[^_|\/]*", str(pet_file)).group(0)
-        except AttributeError:
-            run_id = ""
-        pet_wf_name = f"pet_{pet_string}{run_id}_wf"
-        pet_wf = Workflow(name=pet_wf_name)
+            # skip anything in the exclude list
+            if ses_id.replace("ses-", "") in sessions_to_exclude:
+                continue
 
-        weighted_average = Node(
-            WeightedAverage(pet_file=pet_file), name="weighted_average"
-        )
+            # collect run info from pet file
+            try:
+                run_id = "_" + re.search("run-[^_|\/]*", str(pet_file)).group(0)
+            except AttributeError:
+                run_id = ""
+            pet_wf_name = f"pet_{pet_string}{run_id}_wf"
+            pet_wf = Workflow(name=pet_wf_name)
 
-        # rename registration file to something more descriptive than registration.lta
-        # we do this here to account for mulitple runs during the same session
-        mricoreg = MRICoreg(reference_file=t1w_file)
-        mricoreg.inputs.out_lta_file = f"{pet_string}{run_id}_desc-pet2anat_pet.lta"
+            weighted_average = Node(
+                WeightedAverage(pet_file=pet_file), name="weighted_average"
+            )
 
-        coreg_pet_to_t1w = Node(mricoreg, "coreg_pet_to_t1w")
+            # rename registration file to something more descriptive than registration.lta
+            # we do this here to account for mulitple runs during the same session
+            mricoreg = MRICoreg(reference_file=t1w_file)
+            mricoreg.inputs.out_lta_file = f"{pet_string}{run_id}_desc-pet2anat_pet.lta"
 
-        deface_pet = Node(ApplyMideface(in_file=pet_file), name="deface_pet")
+            coreg_pet_to_t1w = Node(mricoreg, "coreg_pet_to_t1w")
 
-        pet_wf.connect(
-            [
-                (weighted_average, coreg_pet_to_t1w, [("out_file", "source_file")]),
-                (coreg_pet_to_t1w, deface_pet, [("out_lta_file", "lta_file")]),
-                (
-                    coreg_pet_to_t1w,
-                    datasink,
-                    [("out_lta_file", f"{pet_string.replace('_', '.')}.pet.@{run_id}")],
-                ),
-                (
-                    deface_pet,
-                    datasink,
-                    [
-                        (
-                            "out_file",
-                            f"{pet_string.replace('_', '.')}.pet.@defaced{run_id}",
-                        )
-                    ],
-                ),
-            ]
-        )
+            deface_pet = Node(ApplyMideface(in_file=pet_file), name="deface_pet")
 
-        workflow.connect(
-            [
-                (
-                    t1w_workflows[t1w_file]["workflow"],
-                    pet_wf,
-                    [
-                        (
-                            f"deface_t1w_{t1w_workflows[t1w_file]['anat_string']}.out_facemask",
-                            "deface_pet.facemask",
-                        )
-                    ],
-                )
-            ]
-        )
+            pet_wf.connect(
+                [
+                    (weighted_average, coreg_pet_to_t1w, [("out_file", "source_file")]),
+                    (coreg_pet_to_t1w, deface_pet, [("out_lta_file", "lta_file")]),
+                    (
+                        coreg_pet_to_t1w,
+                        datasink,
+                        [
+                            (
+                                "out_lta_file",
+                                f"{pet_string.replace('_', '.')}.pet.@{run_id}",
+                            )
+                        ],
+                    ),
+                    (
+                        deface_pet,
+                        datasink,
+                        [
+                            (
+                                "out_file",
+                                f"{pet_string.replace('_', '.')}.pet.@defaced{run_id}",
+                            )
+                        ],
+                    ),
+                ]
+            )
+
+            workflow.connect(
+                [
+                    (
+                        t1w_workflows[t1w_file]["workflow"],
+                        pet_wf,
+                        [
+                            (
+                                f"deface_t1w_{t1w_workflows[t1w_file]['anat_string']}.out_facemask",
+                                "deface_pet.facemask",
+                            )
+                        ],
+                    )
+                ]
+            )
 
     return workflow
 
@@ -540,7 +582,7 @@ def wrap_up_defacing(
     :param path_to_dataset: Path to original dataset
     :type path_to_dataset: path like object (str or pathlib.Path)
     :param output_dir: Specific directory to place output, arguably redundant given placemnent, defaults to
-        input_dir/derivatives/petdeface
+        bids_dir/derivatives/petdeface
     :type output_dir: path like object (str or pathlib.Path), optional
     :param placement:  str, optional
         Can be one of three values
@@ -718,15 +760,16 @@ class PetDeface:
         self,
         bids_dir,
         output_dir=None,
-        anat_only=False,  # TODO: currently not implemented
+        anat_only=False,
         subject="",
-        session="",  # TODO: currently not implemented
         n_procs=2,
         skip_bids_validator=True,
-        remove_existing=True,  # TODO: currently not implemented
-        placement="adjacent",  # TODO: currently not implemented
+        remove_existing=True,
+        placement="adjacent",
         preview_pics=True,
-        excludesubject=[],
+        participant_label_exclude=[],
+        session=[],
+        session_label_exclude=[],
     ):
         self.bids_dir = bids_dir
         self.remove_existing = remove_existing
@@ -734,11 +777,12 @@ class PetDeface:
         self.output_dir = output_dir
         self.anat_only = anat_only
         self.subject = subject
-        self.session = session
         self.n_procs = n_procs
         self.skip_bids_validator = skip_bids_validator
         self.preview_pics = preview_pics
-        self.excludesubject = excludesubject
+        self.participant_label_exclude = participant_label_exclude
+        self.session = session
+        self.session_label_exclude = session_label_exclude
 
         # check if freesurfer license is valid
         self.fs_license = check_valid_fs_license()
@@ -747,7 +791,9 @@ class PetDeface:
             if not self.fs_license.exists():
                 raise ValueError("Freesurfer license is not valid")
             else:
-                print(f"Using freesurfer license at {self.fs_license} found in system env at $FREESURFER_LICENSE")
+                print(
+                    f"Using freesurfer license at {self.fs_license} found in system env at $FREESURFER_LICENSE"
+                )
 
     def run(self):
         """
@@ -760,14 +806,15 @@ class PetDeface:
                 "output_dir": self.output_dir,
                 "anat_only": self.anat_only,
                 "subject": self.subject,
-                "session": self.session,
                 "n_procs": self.n_procs,
                 "skip_bids_validator": self.skip_bids_validator,
                 "participant_label": self.subject,
                 "placement": self.placement,
                 "remove_existing": self.remove_existing,
                 "preview_pics": self.preview_pics,
-                "excludesubject": self.excludesubject,
+                "participant_label_exclude": self.participant_label_exclude,
+                "session": self.session,
+                "session_label_exclude": self.session_label_exclude,
             }
         )
         wrap_up_defacing(
@@ -785,15 +832,21 @@ def cli():
     parser = argparse.ArgumentParser(description="PetDeface")
 
     parser.add_argument(
-        "input_dir", help="The directory with the input dataset", type=pathlib.Path
+        "bids_dir", help="The directory with the input dataset", type=pathlib.Path
     )
     parser.add_argument(
-        "--output_dir",
-        "-o",
-        help="The directory where the output files should be stored",
+        "output_dir",
+        nargs="?",
+        help="The directory where the output files should be stored, if not supplied will default to <bids_dir>/derivatives/petdeface",
         type=pathlib.Path,
-        required=False,
         default=None,
+    )
+    parser.add_argument(
+        "analysis_level",
+        nargs="?",
+        default="participant",
+        help="This BIDS app always operates at the participant level, if this argument is changed it will be ignored and run as "
+        "a participant level analysis",
     )
     parser.add_argument(
         "--anat_only",
@@ -803,19 +856,11 @@ def cli():
         help="Only deface anatomical images",
     )
     parser.add_argument(
-        "--subject",
-        "-s",
-        help="The label of the subject to be processed.",
+        "--participant_label",
+        "-pl",
+        help="The label(s) of the participant/subject to be processed. When specifying multiple subjects separate them with spaces.",
         type=str,
         nargs="+",
-        required=False,
-        default="",
-    )
-    parser.add_argument(
-        "--session",
-        "-ses",
-        help="The label of the session to be processed.",
-        type=str,
         required=False,
         default="",
     )
@@ -849,9 +894,9 @@ def cli():
         "--placement",
         "-p",
         help="Where to place the defaced images. Options are "
-        "'adjacent': next to the input_dir (default) in a folder appended with _defaced"
-        "'inplace': defaces the dataset in place, e.g. replaces faced PET and T1w images w/ defaced at input_dir"
-        "'derivatives': does all of the defacing within the derivatives folder in input_dir.",
+        "'adjacent': next to the bids_dir (default) in a folder appended with _defaced"
+        "'inplace': defaces the dataset in place, e.g. replaces faced PET and T1w images w/ defaced at bids_dir"
+        "'derivatives': does all of the defacing within the derivatives folder in bids_dir.",
         type=str,
         required=False,
         default="adjacent",
@@ -870,8 +915,24 @@ def cli():
         default=False,
     )
     parser.add_argument(
-        "--excludesubject",
-        help="Exclude a subject(s) from the defacing workflow. e.g. --excludesubject sub-01 sub-02",
+        "--participant_label_exclude",
+        help="Exclude a subject(s) from the defacing workflow. e.g. --participant_label_exclude sub-01 sub-02",
+        type=str,
+        nargs="+",
+        required=False,
+        default=[],
+    )
+    parser.add_argument(
+        "--session_label",
+        help="Select only a specific session(s) to include in the defacing workflow",
+        type=str,
+        nargs="+",
+        required=False,
+        default=[],
+    )
+    parser.add_argument(
+        "--session_label_exclude",
+        help="Select a specific session(s) to exclude from the defacing workflow",
         type=str,
         nargs="+",
         required=False,
@@ -900,10 +961,10 @@ def main():  # noqa: max-complexity: 12
 
     args = cli()
 
-    if isinstance(args.input_dir, pathlib.PosixPath) and "~" in str(args.input_dir):
-        args.input_dir = args.input_dir.expanduser().resolve()
+    if isinstance(args.bids_dir, pathlib.PosixPath) and "~" in str(args.bids_dir):
+        args.bids_dir = args.bids_dir.expanduser().resolve()
     else:
-        args.input_dir = args.input_dir.absolute()
+        args.bids_dir = args.bids_dir.absolute()
     if isinstance(args.output_dir, pathlib.PosixPath) and "~" in str(args.output_dir):
         args.output_dir = args.output_dir.expanduser().resolve()
     else:
@@ -920,22 +981,22 @@ def main():  # noqa: max-complexity: 12
         gid = os.getegid()
         system_platform = system()
 
-        input_mount_point = str(args.input_dir)
+        input_mount_point = str(args.bids_dir)
         output_mount_point = str(args.output_dir)
 
         if output_mount_point == "None" or output_mount_point is None:
-            output_mount_point = str(args.input_dir / "derivatives" / "petdeface")
+            output_mount_point = str(args.bids_dir / "derivatives" / "petdeface")
 
         # create output directory if it doesn't exist
         if not pathlib.Path(output_mount_point).exists():
             pathlib.Path(output_mount_point).mkdir(parents=True, exist_ok=True)
         subprocess.run(f"chown -R {uid}:{gid} {str(output_mount_point)}", shell=True)
 
-        args.input_dir = pathlib.Path("/input")
+        args.bids_dir = pathlib.Path("/input")
         args.output_dir = pathlib.Path("/output")
         print(
             "Attempting to run in docker container, mounting {} to {} and {} to {}".format(
-                input_mount_point, args.input_dir, output_mount_point, args.output_dir
+                input_mount_point, args.bids_dir, output_mount_point, args.output_dir
             )
         )
         # convert args to dictionary
@@ -957,9 +1018,9 @@ def main():  # noqa: max-complexity: 12
         )
         args_string = args_string.replace("empty_str", "")
 
-        # remove --input_dir from args_string as input dir is positional, we
+        # remove --bids_dir from args_string as input dir is positional, we
         # we're simply removing an artifact of argparse
-        args_string = args_string.replace("--input_dir", "")
+        args_string = args_string.replace("--bids_dir", "")
 
         # invoke docker run command to run petdeface in container, while redirecting stdout and stderr to terminal
         docker_command = f"docker run "
@@ -969,7 +1030,7 @@ def main():  # noqa: max-complexity: 12
 
         docker_command += (
             f"-a stderr -a stdout --rm "
-            f"-v {input_mount_point}:{args.input_dir} "
+            f"-v {input_mount_point}:{args.bids_dir} "
             f"-v {output_mount_point}:{args.output_dir} "
         )
         if code_dir:
@@ -1004,8 +1065,12 @@ def main():  # noqa: max-complexity: 12
     elif args.singularity:
         singularity_command = f"singularity exec -e"
 
-        if args.output_dir == "None" or args.output_dir is None or args.output_dir == "":
-            args.output_dir = args.input_dir / "derivatives" / "petdeface"
+        if (
+            args.output_dir == "None"
+            or args.output_dir is None
+            or args.output_dir == ""
+        ):
+            args.output_dir = args.bids_dir / "derivatives" / "petdeface"
 
         # create output directory if it doesn't exist
         if not args.output_dir.exists():
@@ -1030,9 +1095,9 @@ def main():  # noqa: max-complexity: 12
         )
         args_string = args_string.replace("empty_str", "")
 
-        # remove --input_dir from args_string as input dir is positional, we
+        # remove --bids_dir from args_string as input dir is positional, we
         # we're simply removing an artifact of argparse
-        args_string = args_string.replace("--input_dir", "")
+        args_string = args_string.replace("--bids_dir", "")
 
         # collect location of freesurfer license if it's installed and working
         try:
@@ -1045,7 +1110,9 @@ def main():  # noqa: max-complexity: 12
                     "Freesurfer license not found, please set FREESURFER_LICENSE environment variable or place license.txt in FREESURFER_HOME"
                 )
 
-        singularity_command += f" --bind {str(license_location)}:/opt/freesurfer/license.txt"
+        singularity_command += (
+            f" --bind {str(license_location)}:/opt/freesurfer/license.txt"
+        )
         singularity_command += f" docker://openneuropet/petdeface:{__version__}"
         singularity_command += f" petdeface"
         singularity_command += args_string
@@ -1054,20 +1121,20 @@ def main():  # noqa: max-complexity: 12
 
         subprocess.run(singularity_command, shell=True)
 
-
     else:
         petdeface = PetDeface(
-            bids_dir=args.input_dir,
+            bids_dir=args.bids_dir,
             output_dir=args.output_dir,
             anat_only=args.anat_only,
-            subject=args.subject,
-            session=args.session,
+            subject=args.participant_label,
             n_procs=args.n_procs,
             skip_bids_validator=args.skip_bids_validator,
             remove_existing=args.remove_existing,
             placement=args.placement,
             preview_pics=args.preview_pics,
-            excludesubject=args.excludesubject,
+            participant_label_exclude=args.participant_label_exclude,
+            session=args.session_label,
+            session_label_exclude=args.session_label_exclude,
         )
         petdeface.run()
 
