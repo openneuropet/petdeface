@@ -277,7 +277,7 @@ def deface(args: Union[dict, argparse.Namespace]) -> None:
                 args.bids_dir,
                 preview_pics=args.preview_pics,
                 anat_only=args.anat_only,
-                session=args.session_label,
+                session_label=args.session_label,
                 session_label_exclude=args.session_label_exclude,
             )
         except FileNotFoundError:
@@ -305,7 +305,7 @@ def init_single_subject_wf(
     output_dir: pathlib.Path = None,
     preview_pics=False,
     anat_only=False,
-    session=[],
+    session_label=[],
     session_label_exclude=[],
 ) -> Workflow:
     """
@@ -343,10 +343,10 @@ def init_single_subject_wf(
 
     # we combine the sessions to include and exclude into a single set of sessions to exclude from
     # the set of all sessions
-    if session:
+    if session_label:
         sessions_to_exclude = list(
             set(bids_data.get_sessions())
-            - (set(bids_data.get_sessions()) & set(session))
+            - (set(bids_data.get_sessions()) & set(session_label))
             | set(session_label_exclude)
         )
     else:
@@ -768,7 +768,7 @@ class PetDeface:
         placement="adjacent",
         preview_pics=True,
         participant_label_exclude=[],
-        session=[],
+        session_label=[],
         session_label_exclude=[],
     ):
         self.bids_dir = bids_dir
@@ -781,7 +781,7 @@ class PetDeface:
         self.skip_bids_validator = skip_bids_validator
         self.preview_pics = preview_pics
         self.participant_label_exclude = participant_label_exclude
-        self.session = session
+        self.session_label = session_label
         self.session_label_exclude = session_label_exclude
 
         # check if freesurfer license is valid
@@ -813,7 +813,7 @@ class PetDeface:
                 "remove_existing": self.remove_existing,
                 "preview_pics": self.preview_pics,
                 "participant_label_exclude": self.participant_label_exclude,
-                "session": self.session,
+                "session_label": self.session_label,
                 "session_label_exclude": self.session_label_exclude,
             }
         )
@@ -1133,7 +1133,7 @@ def main():  # noqa: max-complexity: 12
             placement=args.placement,
             preview_pics=args.preview_pics,
             participant_label_exclude=args.participant_label_exclude,
-            session=args.session_label,
+            session_label=args.session_label,
             session_label_exclude=args.session_label_exclude,
         )
         petdeface.run()
