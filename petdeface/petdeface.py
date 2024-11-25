@@ -24,6 +24,7 @@ from niworkflows.utils.bids import collect_participants
 from niworkflows.utils.misc import check_valid_fs_license
 
 from petutils.petutils import collect_anat_and_pet
+from importlib.metadata import version
 
 
 try:
@@ -42,43 +43,15 @@ places_to_look = [
     pathlib.Path(__file__).parent.parent.absolute(),
 ]
 
-__version__ = "unable to locate version number in pyproject.toml"
+__version__ = "unable to locate version number"
 # we use the default version at the time of this writing, but the most current version
 # can be found in the pyproject.toml file under the [tool.bids] section
 __bids_version__ = "1.8.0"
 
 
-# search for toml file
-for place in places_to_look:
-    for root, folders, files in os.walk(place):
-        for file in files:
-            if file.endswith("pyproject.toml") and "petdeface" in os.path.join(
-                root, file
-            ):
-                toml_file = os.path.join(root, file)
-
-                with open(toml_file, "r") as f:
-                    for line in f.readlines():
-                        if (
-                            "version" in line
-                            and len(line.split("=")) > 1
-                            and "bids_version" not in line
-                        ):
-                            __version__ = line.split("=")[1].strip().replace('"', "")
-                        if "bids_version" in line and len(line.split("=")) > 1:
-                            __bids_version__ = (
-                                line.split("=")[1].strip().replace('"', "")
-                            )
-                # if the version number is found and is formatted  with major.minor.patch formating we can break
-                # we check the version with a regex expression to see if all of the parts are there
-                if re.match(r"\d+\.\d+\.\d+", __version__):
-                    break
-
-            if __version__ != "unable to locate version number in pyproject.toml":
-                # we try to load the version using import lib
-                __version__ = importlib.metadata.version("petdeface")
-                if re.match(r"\d+\.\d+\.\d+", __version__):
-                    break
+if __version__ == "unable to locate version number":
+    # we try to load the version using import lib
+    __version__ = version(__package__)
 
 
 def locate_freesurfer_license():
@@ -257,7 +230,9 @@ def deface(args: Union[dict, argparse.Namespace]) -> None:
             subject.replace("sub-", "") for subject in args.participant_label_exclude
         ]
         subjects = [
-            subject for subject in subjects if subject not in args.participant_label_exclude
+            subject
+            for subject in subjects
+            if subject not in args.participant_label_exclude
         ]
 
         print(f"Subjects remaining in the defacing workflow: {subjects}")
