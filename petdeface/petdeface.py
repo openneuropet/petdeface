@@ -24,6 +24,7 @@ from niworkflows.utils.bids import collect_participants
 from niworkflows.utils.misc import check_valid_fs_license
 
 from petutils.petutils import collect_anat_and_pet
+from importlib.metadata import version
 
 
 try:
@@ -42,43 +43,27 @@ places_to_look = [
     pathlib.Path(__file__).parent.parent.absolute(),
 ]
 
-__version__ = "unable to locate version number in pyproject.toml"
+__version__ = "unable to locate version number"
 # we use the default version at the time of this writing, but the most current version
 # can be found in the pyproject.toml file under the [tool.bids] section
 __bids_version__ = "1.8.0"
 
 
-# search for toml file
-for place in places_to_look:
-    for root, folders, files in os.walk(place):
-        for file in files:
-            if file.endswith("pyproject.toml") and "petdeface" in os.path.join(
-                root, file
-            ):
-                toml_file = os.path.join(root, file)
-
-                with open(toml_file, "r") as f:
-                    for line in f.readlines():
-                        if (
-                            "version" in line
-                            and len(line.split("=")) > 1
-                            and "bids_version" not in line
-                        ):
+if __version__ == "unable to locate version number":
+    # we try to load the version using import lib
+    try:
+        __version__ = version(__package__)
+    except ValueError:
+        # if we can't load the version using importlib we try to load it from the pyproject.toml
+        for place in places_to_look:
+            try:
+                with open(place / "pyproject.toml") as f:
+                    for line in f:
+                        if "version" in line and "bid" not in line.lower():
                             __version__ = line.split("=")[1].strip().replace('"', "")
-                        if "bids_version" in line and len(line.split("=")) > 1:
-                            __bids_version__ = (
-                                line.split("=")[1].strip().replace('"', "")
-                            )
-                # if the version number is found and is formatted  with major.minor.patch formating we can break
-                # we check the version with a regex expression to see if all of the parts are there
-                if re.match(r"\d+\.\d+\.\d+", __version__):
-                    break
-
-            if __version__ != "unable to locate version number in pyproject.toml":
-                # we try to load the version using import lib
-                __version__ = importlib.metadata.version("petdeface")
-                if re.match(r"\d+\.\d+\.\d+", __version__):
-                    break
+                            break
+            except FileNotFoundError:
+                pass
 
 
 def locate_freesurfer_license():
@@ -231,9 +216,7 @@ def deface(args: Union[dict, argparse.Namespace]) -> None:
         # right side of the sub- string as the subject label
         if any("sub-" in subject for subject in subjects):
             print("One or more subject contains sub- string")
-        subjects = [
-            subject.replace("sub-", "") for subject in subjects if "sub-" in subject
-        ]
+        subjects = [subject.replace("sub-", "") for subject in subjects]
         # raise error if a supplied subject is not contained in the dataset
         participants = collect_participants(
             args.bids_dir, bids_validate=~args.skip_bids_validator
@@ -257,7 +240,9 @@ def deface(args: Union[dict, argparse.Namespace]) -> None:
             subject.replace("sub-", "") for subject in args.participant_label_exclude
         ]
         subjects = [
-            subject for subject in subjects if subject not in args.participant_label_exclude
+            subject
+            for subject in subjects
+            if subject not in args.participant_label_exclude
         ]
 
         print(f"Subjects remaining in the defacing workflow: {subjects}")
@@ -277,7 +262,7 @@ def deface(args: Union[dict, argparse.Namespace]) -> None:
                 args.bids_dir,
                 preview_pics=args.preview_pics,
                 anat_only=args.anat_only,
-                session=args.session_label,
+                session_label=args.session_label,
                 session_label_exclude=args.session_label_exclude,
             )
         except FileNotFoundError:
@@ -305,7 +290,7 @@ def init_single_subject_wf(
     output_dir: pathlib.Path = None,
     preview_pics=False,
     anat_only=False,
-    session=[],
+    session_label=[],
     session_label_exclude=[],
 ) -> Workflow:
     """
@@ -343,10 +328,10 @@ def init_single_subject_wf(
 
     # we combine the sessions to include and exclude into a single set of sessions to exclude from
     # the set of all sessions
-    if session:
+    if session_label:
         sessions_to_exclude = list(
             set(bids_data.get_sessions())
-            - (set(bids_data.get_sessions()) & set(session))
+            - (set(bids_data.get_sessions()) & set(session_label))
             | set(session_label_exclude)
         )
     else:
@@ -768,7 +753,7 @@ class PetDeface:
         placement="adjacent",
         preview_pics=True,
         participant_label_exclude=[],
-        session=[],
+        session_label=[],
         session_label_exclude=[],
     ):
         self.bids_dir = bids_dir
@@ -781,7 +766,7 @@ class PetDeface:
         self.skip_bids_validator = skip_bids_validator
         self.preview_pics = preview_pics
         self.participant_label_exclude = participant_label_exclude
-        self.session = session
+        self.session_label = session_label
         self.session_label_exclude = session_label_exclude
 
         # check if freesurfer license is valid
@@ -813,7 +798,7 @@ class PetDeface:
                 "remove_existing": self.remove_existing,
                 "preview_pics": self.preview_pics,
                 "participant_label_exclude": self.participant_label_exclude,
-                "session": self.session,
+                "session_label": self.session_label,
                 "session_label_exclude": self.session_label_exclude,
             }
         )
@@ -1133,7 +1118,7 @@ def main():  # noqa: max-complexity: 12
             placement=args.placement,
             preview_pics=args.preview_pics,
             participant_label_exclude=args.participant_label_exclude,
-            session=args.session_label,
+            session_label=args.session_label,
             session_label_exclude=args.session_label_exclude,
         )
         petdeface.run()
