@@ -51,7 +51,19 @@ __bids_version__ = "1.8.0"
 
 if __version__ == "unable to locate version number":
     # we try to load the version using import lib
-    __version__ = version(__package__)
+    try:
+        __version__ = version(__package__)
+    except ValueError:
+        # if we can't load the version using importlib we try to load it from the pyproject.toml
+        for place in places_to_look:
+            try:
+                with open(place / "pyproject.toml") as f:
+                    for line in f:
+                        if "version" in line and "bid" not in line.lower():
+                            __version__ = line.split("=")[1].strip().replace('"', "")
+                            break
+            except FileNotFoundError:
+                pass
 
 
 def locate_freesurfer_license():
@@ -204,9 +216,7 @@ def deface(args: Union[dict, argparse.Namespace]) -> None:
         # right side of the sub- string as the subject label
         if any("sub-" in subject for subject in subjects):
             print("One or more subject contains sub- string")
-        subjects = [
-            subject.replace("sub-", "") for subject in subjects if "sub-" in subject
-        ]
+        subjects = [subject.replace("sub-", "") for subject in subjects]
         # raise error if a supplied subject is not contained in the dataset
         participants = collect_participants(
             args.bids_dir, bids_validate=~args.skip_bids_validator
