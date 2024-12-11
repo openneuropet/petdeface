@@ -55,6 +55,14 @@ class WeightedAverage(BaseInterface):
         frames_duration = np.array(meta.outputs.out_dict["FrameDuration"])
 
         mid_frames = frames_start + frames_duration / 2
+
+        # check to see if the json sidecar file has the correct number of frames
+        if len(mid_frames) != data.shape[-1]:
+            json_file = pet_file.replace(".gz", "").replace(".nii", ".json")
+            raise ValueError(
+                f"Number of frames in {pet_file} does not match the number of frames in the json sidecar file {json_file}"
+            )
+
         wavg = np.trapz(data, x=mid_frames) / (mid_frames[-1] - mid_frames[0])
 
         _, base, ext = split_filename(pet_file)
