@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "petdeface"
-version = "0.1.1"
+version = "0.2.2"
 description = "A nipype PET and MR defacing pipeline for BIDS datasets utilizing FreeSurfer's MiDeFace."
 authors = ["Martin Nørgaard <martin.noergaard@nru.dk>", "Anthony Galassi <28850131+bendhouseart@users.noreply.github.com>", "Murat Bilgel <bilgelm@gmail.com>"]
 license = "MIT"
@@ -16,9 +16,9 @@ bids_version = "1.8.0"
 
 [tool.poetry.dependencies]
 python = ">=3.10, <4.0"
-niworkflows = { git = "https://github.com/nipreps/niworkflows.git" }
 setuptools = "^68.1.2"
 petutils = "^0.0.1"
+niworkflows = "^1.11.0"
 
 [tool.poetry.group.dev.dependencies]
 black = "^23.7.0"
@@ -27,7 +27,7 @@ isort = "^5.12.0"
 pre-commit = "^3.3.3"
 pytest = "^7.4.2"
 sphinx = "^7.2.6"
-sphinx-rtd-theme = "^2.0.0"
+sphinx-rtd-theme = "^3.0.1"
 
 [tool.isort]
 profile = "black"

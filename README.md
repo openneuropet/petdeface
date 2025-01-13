@@ -35,42 +35,49 @@ This software can be installed via source or via pip from PyPi with `pip install
 **_NOTE:_** This project is currently in beta release, some features listed below may not be available for version numbers < 1.0.0
 
 ```bash
-usage: petdeface.py [-h] [--output_dir OUTPUT_DIR] [--anat_only]
-       [--subject SUBJECT] [--session SESSION] [--docker]
-       [--n_procs N_PROCS] [--skip_bids_validator] [--version]
-       [--placement PLACEMENT] [--remove_existing] input_dir
+usage: petdeface.py [-h] [--anat_only] [--participant_label PARTICIPANT_LABEL [PARTICIPANT_LABEL ...]] [--docker] [--singularity] [--n_procs N_PROCS]
+                    [--skip_bids_validator] [--version] [--placement PLACEMENT] [--remove_existing] [--preview_pics]
+                    [--participant_label_exclude participant_label_exclude [participant_label_exclude ...]] [--session_label SESSION [SESSION ...]]
+                    [--session_label_exclude session_label_exclude [session_label_exclude ...]]
+                    bids_dir [output_dir] [analysis_level]
 
 PetDeface
 
 positional arguments:
-  input_dir             The directory with the input dataset
+  bids_dir              The directory with the input dataset
+  output_dir            The directory where the output files should be stored, if not supplied will default to <bids_dir>/derivatives/petdeface
+  analysis_level        This BIDS app always operates at the participant level, if this argument is changed it will be ignored and run as a participant level
+                        analysis
 
 options:
   -h, --help            show this help message and exit
-  --output_dir OUTPUT_DIR, -o OUTPUT_DIR
-                        The directory where the output files should be stored
   --anat_only, -a       Only deface anatomical images
-  --subject SUBJECT, -s SUBJECT
-                        The label of the subject to be processed.
-  --session SESSION, -ses SESSION
-                        The label of the session to be processed.
+  --participant_label PARTICIPANT_LABEL [PARTICIPANT_LABEL ...], -pl PARTICIPANT_LABEL [PARTICIPANT_LABEL ...]
+                        The label(s) of the participant/subject to be processed. When specifying multiple subjects separate them with spaces.
   --docker, -d          Run in docker container
+  --singularity, -si    Run in singularity container
   --n_procs N_PROCS     Number of processors to use when running the workflow
   --skip_bids_validator
-  --version, -v         show programs version number and exit
+  --version, -v         show program's version number and exit
   --placement PLACEMENT, -p PLACEMENT
-                        Where to place the defaced images. Options are
-                        'adjacent': next to the input_dir (default) in a folder appended with _defaced
-                        'inplace': defaces the dataset in place, e.g. replaces faced PET and T1w images
-                        w/ defaced at input_dir
-                        'derivatives': does all of the defacing within the derivatives folder in input_dir.
-  --remove_existing, -r Remove existing output files in output_dir.
+                        Where to place the defaced images. Options are 'adjacent': next to the bids_dir (default) in a folder appended with _defaced'inplace':
+                        defaces the dataset in place, e.g. replaces faced PET and T1w images w/ defaced at bids_dir'derivatives': does all of the defacing within
+                        the derivatives folder in bids_dir.
+  --remove_existing, -r
+                        Remove existing output files in output_dir.
+  --preview_pics        Create preview pictures of defacing, defaults to false for docker
+  --participant_label_exclude participant_label_exclude [participant_label_exclude ...]
+                        Exclude a subject(s) from the defacing workflow. e.g. --participant_label_exclude sub-01 sub-02
+  --session_label SESSION [SESSION ...]
+                        Select only a specific session(s) to include in the defacing workflow
+  --session_label_exclude session_label_exclude [session_label_exclude ...]
+                        Select a specific session(s) to exclude from the defacing workflow
 ```
 
 Working example usage:
 
 ```bash
-petdeface /inputfolder --output_dir /outputfolder --n_procs 16 --skip_bids_validator --placement adjacent
+petdeface /inputfolder /outputfolder --n_procs 16 --skip_bids_validator --placement adjacent
 ```
 
 ### Docker Usage
@@ -103,8 +110,31 @@ docker run --user=$UID:$GID -a stderr -a stdout --rm \
 -v /Data/defaced_pet_data/:/output \
 -v /home/freesurfer/license.txt:/opt/freesurfer/license.txt \
 --platform linux/amd64 \
-petdeface:latest  /input --output_dir /output --n_procs 16 --skip_bids_validator  --placement adjacent --user=$UID:$GID system_platform=Linux
+petdeface:latest  /input /output --n_procs 16 --skip_bids_validator  --placement adjacent --user=$UID:$GID system_platform=Linux
 ```
+
+### Singularity Usage
+
+Requirements:
+  - Singularity must be installed
+  - `openneuropet/petdeface` must be present or reachable at dockerhub
+
+One can execute petdeface in singularity either directly via:
+
+```bash
+singularity exec -e --bind license.txt:/opt/freesurfer/license.txt docker://openneuropet/petdeface:0.1.1 petdeface
+```
+
+Input and Output directories don't need to be bound, but one does need to bind a freesurfer license to the image before they can proceed with defacing.
+Otherwise, one can run and execute petdeface with the same syntax as calling it from the command line, the only difference being that petdeface is prepended
+with `singularity exec -e`
+
+```bash
+singularity exec -e --bind license.txt:/opt/freesurfer/license.txt docker://openneuropet/petdeface:0.1.1 petdeface /input /output --n_procs 10
+```
+
+**_NOTE_**: Testing with singularity has been limited to version singularity-ce 4.2.0, please let us know in the issues section of this repo if you have 
+trouble running this container in singularity/apptainer.
 
 ## Development
 
