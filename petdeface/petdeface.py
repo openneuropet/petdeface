@@ -8,6 +8,7 @@ import shutil
 from bids import BIDSLayout
 import importlib
 import glob
+import sys
 from platform import system
 
 # import shutil
@@ -36,6 +37,37 @@ except ModuleNotFoundError:
     from .mideface import Mideface
     from .pet import WeightedAverage
 
+telemetry_data = {
+    "freesurfer_license": None,
+    "docker_installed": None,
+    "in_docker": None,
+    "version": None,
+    "subjects": None,
+    "pet_niftis": None,
+    "anat_niftis": None,
+    "exit_status": None,
+}
+def sendstatsoncrash(type, value, tb):
+    """
+    Sends telemetry data to openneuropet.org on crash
+    """
+    import traceback
+    import requests
+    #url = "http://openneuropet.org/petdeface"
+    url = "http://127.0.0.1:8000/petdeface/"
+    no_track = os.environ.get("PETDEFACE_NO_TRACK", "False")
+    trace_back_text = ''.join(traceback.format_exception(type, value, tb))
+    print(trace_back_text)
+    if not no_track or no_track == "False":
+        try:
+            requests.post(url, json=telemetry_data)
+    
+        except:
+            pass
+    elif no_track == "True" or no_track == True:
+        pass
+
+sys.excepthook = sendstatsoncrash
 
 # collect version from pyproject.toml
 places_to_look = [
@@ -53,6 +85,9 @@ if __version__ == "unable to locate version number":
     # we try to load the version using import lib
     try:
         __version__ = version(__package__)
+        # if version is not of the form x.y.z we try to load it from the pyproject.toml
+        if not all([x.isdigit() for x in __version__.split(".")]):
+            raise ValueError
     except ValueError:
         # if we can't load the version using importlib we try to load it from the pyproject.toml
         for place in places_to_look:
@@ -65,6 +100,7 @@ if __version__ == "unable to locate version number":
             except FileNotFoundError:
                 pass
 
+telemetry_data['version'] = __version__
 
 def locate_freesurfer_license():
     """
@@ -81,26 +117,31 @@ def locate_freesurfer_license():
     if os.environ.get("FREESURFER_LICENSE", ""):
         fs_license_env_var = pathlib.Path(os.environ.get("FREESURFER_LICENSE", ""))
         if not fs_license_env_var.exists():
+            telemetry_data['freesurfer_license'] = False
             raise ValueError(
                 f"Freesurfer license file does not exist at {fs_license_env_var}, but is set under $FREESURFER_LICENSE variable."
                 f"Update or unset this varible to use the license.txt at $FREESURFER_HOME"
             )
         else:
+            telemetry_data['freesurfer_license'] = True
             return fs_license_env_var
     else:
         # collect freesurfer home environment variable and look there instead
         fs_home = pathlib.Path(os.environ.get("FREESURFER_HOME", ""))
         if not fs_home:
+            telemetry_data['freesurfer_license'] = False
             raise ValueError(
                 "FREESURFER_HOME environment variable is not set, unable to determine location of license file"
             )
         else:
             fs_license = fs_home / pathlib.Path("license.txt")
             if not fs_license.exists():
+                telemetry_data['freesurfer_license'] = False
                 raise ValueError(
                     "Freesurfer license file does not exist at {}".format(fs_license)
                 )
             else:
+                telemetry_data['freesurfer_license'] = True
                 return fs_license
 
 
@@ -120,7 +161,9 @@ def check_docker_installed():
             check=True,
         )
         docker_installed = True
+        telemetry_data["docker_installed"] = docker_installed
     except subprocess.CalledProcessError:
+        telemetry_data["docker_installed"] = False
         raise Exception("Could not detect docker installation, exiting")
     return docker_installed
 
@@ -148,6 +191,7 @@ def determine_in_docker():
             for line in lines:
                 if "bash" in line:
                     in_docker = True
+    telemetry_data["in_docker"] = True
     return in_docker
 
 
