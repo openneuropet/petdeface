@@ -6,8 +6,9 @@ import re
 import sys
 import shutil
 from bids import BIDSLayout
-import importlib
+import requests
 import glob
+import sys
 from platform import system
 
 # import shutil
@@ -36,6 +37,48 @@ except ModuleNotFoundError:
     from .mideface import Mideface
     from .pet import WeightedAverage
 
+telemetry_data = {
+    "freesurfer_license": None,
+    "docker_installed": None,
+    "in_docker": None,
+    "version": None,
+    "subjects": None,
+    "pet_niftis": None,
+    "anat_niftis": None,
+    "workflow_exit_status": None,
+    "move_output_files_status": None,
+}
+
+
+def sendstatsoncrash(type, value, tb):
+    """
+    Sends telemetry data to openneuropet.org on crash
+    """
+    import traceback
+    import requests
+
+    url = "http://openneuropet.org/petdeface"
+    no_track = os.environ.get("PETDEFACE_NO_TRACK", "False")
+    running_in_codebuild = os.environ.get("CODEBUILD_BATCH_BUILD_IDENTIFIER", "False")
+    running_in_actions = os.eniron.get("CI", "False")
+    if running_in_codebuild.lower() != "false" or running_in_actions.lower() != "false":
+        no_track = "True"
+
+    trace_back_text = "".join(traceback.format_exception(type, value, tb))
+    print(trace_back_text)
+    if not no_track or no_track == "False":
+        try:
+            requests.post(url, json=telemetry_data)
+
+        except:
+            pass
+    elif (
+        no_track == "True" or no_track == True
+    ):  # don't do anything if user is opting out
+        pass
+
+
+sys.excepthook = sendstatsoncrash
 
 # collect version from pyproject.toml
 places_to_look = [
@@ -53,6 +96,9 @@ if __version__ == "unable to locate version number":
     # we try to load the version using import lib
     try:
         __version__ = version(__package__)
+        # if version is not of the form x.y.z we try to load it from the pyproject.toml
+        if not all([x.isdigit() for x in __version__.split(".")]):
+            raise ValueError
     except ValueError:
         # if we can't load the version using importlib we try to load it from the pyproject.toml
         for place in places_to_look:
@@ -64,6 +110,8 @@ if __version__ == "unable to locate version number":
                             break
             except FileNotFoundError:
                 pass
+
+telemetry_data["version"] = __version__
 
 
 def locate_freesurfer_license():
@@ -81,26 +129,31 @@ def locate_freesurfer_license():
     if os.environ.get("FREESURFER_LICENSE", ""):
         fs_license_env_var = pathlib.Path(os.environ.get("FREESURFER_LICENSE", ""))
         if not fs_license_env_var.exists():
+            telemetry_data["freesurfer_license"] = False
             raise ValueError(
                 f"Freesurfer license file does not exist at {fs_license_env_var}, but is set under $FREESURFER_LICENSE variable."
                 f"Update or unset this varible to use the license.txt at $FREESURFER_HOME"
             )
         else:
+            telemetry_data["freesurfer_license"] = True
             return fs_license_env_var
     else:
         # collect freesurfer home environment variable and look there instead
         fs_home = pathlib.Path(os.environ.get("FREESURFER_HOME", ""))
         if not fs_home:
+            telemetry_data["freesurfer_license"] = False
             raise ValueError(
                 "FREESURFER_HOME environment variable is not set, unable to determine location of license file"
             )
         else:
             fs_license = fs_home / pathlib.Path("license.txt")
             if not fs_license.exists():
+                telemetry_data["freesurfer_license"] = False
                 raise ValueError(
                     "Freesurfer license file does not exist at {}".format(fs_license)
                 )
             else:
+                telemetry_data["freesurfer_license"] = True
                 return fs_license
 
 
@@ -120,7 +173,9 @@ def check_docker_installed():
             check=True,
         )
         docker_installed = True
+        telemetry_data["docker_installed"] = docker_installed
     except subprocess.CalledProcessError:
+        telemetry_data["docker_installed"] = False
         raise Exception("Could not detect docker installation, exiting")
     return docker_installed
 
@@ -148,6 +203,7 @@ def determine_in_docker():
             for line in lines:
                 if "bash" in line:
                     in_docker = True
+    telemetry_data["in_docker"] = True
     return in_docker
 
 
@@ -255,6 +311,8 @@ def deface(args: Union[dict, argparse.Namespace]) -> None:
 
     petdeface_wf = Workflow(name="petdeface_wf", base_dir=output_dir)
 
+    telemetry_data["subjects"] = len(subjects)
+
     for subject_id in subjects:
         try:
             single_subject_wf = init_single_subject_wf(
@@ -275,7 +333,11 @@ def deface(args: Union[dict, argparse.Namespace]) -> None:
         petdeface_wf.write_graph("petdeface.dot", graph2use="colored", simple_form=True)
     except OSError as Err:
         print(f"Raised this error {Err}\nGraphviz may not be installed.")
-    petdeface_wf.run(plugin="MultiProc", plugin_args={"n_procs": int(args.n_procs)})
+    result = petdeface_wf.run(
+        plugin="MultiProc", plugin_args={"n_procs": int(args.n_procs)}
+    )
+
+    telemetry_data["workflow_exit_status"] = result.runtime.returncode
 
     # write out dataset_description.json file to derivatives directory
     write_out_dataset_description_json(args.bids_dir)
@@ -544,7 +606,11 @@ def write_out_dataset_description_json(input_bids_dir, output_bids_dir=None):
 
 
 def wrap_up_defacing(
-    path_to_dataset, output_dir=None, placement="adjacent", remove_existing=True
+    path_to_dataset,
+    output_dir=None,
+    placement="adjacent",
+    remove_existing=True,
+    no_track=False,
 ):
     """
     This function maps the output of this pipeline to the original dataset and depending on the
@@ -682,6 +748,24 @@ def wrap_up_defacing(
     for leftover in leftover_files:
         leftover.unlink()
 
+
+    codebuild = os.environ.get("CODEBUILD_BATCH_BUILD_IDENTIFIER", False)
+    actions = os.eniron.get("CI", False)
+    # a bit much, but we want to check if no_track is passed to the class PetDeface, set in the environment, and 
+    # whether or not it's running in CI/CD. If any of these are true, we don't want to send telemetry data
+    if not no_track or os.getenv("PETDEFACE_NO_TRACK", "False").lower() == "false" and (not actions and not codebuild):
+        telemetry_data["subjects"] = len(layout.get_subjects())
+        telemetry_data["pet_niftis"] = len(
+            [nifti for nifti in layout.get(suffix="pet") if ".nii" in nifti]
+        )
+        telemetry_data["anat_niftis"] = len(
+            [nifti for nifti in layout.get(suffix="T1w") if ".nii" in nifti]
+        )
+        telemetry_data["move_output_files_status"] = True
+        requests.post(
+            "http://openneuropet.org/petdeface", json=telemetry_data, timeout=5
+        )
+
     print(f"completed copying dataset to {final_destination}")
 
 
@@ -755,6 +839,7 @@ class PetDeface:
         participant_label_exclude=[],
         session_label=[],
         session_label_exclude=[],
+        no_track=False,
     ):
         self.bids_dir = bids_dir
         self.remove_existing = remove_existing
@@ -768,6 +853,7 @@ class PetDeface:
         self.participant_label_exclude = participant_label_exclude
         self.session_label = session_label
         self.session_label_exclude = session_label_exclude
+        self.no_track = no_track
 
         # check if freesurfer license is valid
         self.fs_license = check_valid_fs_license()
@@ -800,6 +886,7 @@ class PetDeface:
                 "participant_label_exclude": self.participant_label_exclude,
                 "session_label": self.session_label,
                 "session_label_exclude": self.session_label_exclude,
+                "no_track": self.no_track,
             }
         )
         wrap_up_defacing(
@@ -807,6 +894,7 @@ class PetDeface:
             self.output_dir,
             placement=self.placement,
             remove_existing=self.remove_existing,
+            no_track=self.no_track,
         )
 
 
@@ -923,6 +1011,13 @@ def cli():
         required=False,
         default=[],
     )
+    parser.add_argument(
+        "--notrack",
+        help="Opt-out of sending tracking information of this run to the petdeface developers. "
+        "This information helps to improve petdeface and provides an indicator of real world usage crucial for obtaining funding.",
+        action="store_true",
+        default=False,
+    )
 
     arguments = parser.parse_args()
     return arguments
@@ -945,6 +1040,9 @@ def main():  # noqa: max-complexity: 12
         code_dir = None
 
     args = cli()
+
+    if args.notrack:
+        os.environ["PETDEFACE_NO_TRACK"] = "True"
 
     if isinstance(args.bids_dir, pathlib.PosixPath) and "~" in str(args.bids_dir):
         args.bids_dir = args.bids_dir.expanduser().resolve()
@@ -1120,6 +1218,7 @@ def main():  # noqa: max-complexity: 12
             participant_label_exclude=args.participant_label_exclude,
             session_label=args.session_label,
             session_label_exclude=args.session_label_exclude,
+            no_track=args.notrack,
         )
         petdeface.run()
 
