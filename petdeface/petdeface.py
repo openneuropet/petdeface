@@ -1015,8 +1015,9 @@ def main():  # noqa: max-complexity: 12
         full_message = f"{wrapped_message}\n\n{command_message}\n\n{bad_files_message}"
         
         # Check if all problematic subjects are already in the exclude list
-        bad_tw1s_excluded = [t1w in args.participant_label_exclude for t1w in bad_t1w_subject_ids ]
-        if False in bad_t1w_subject_ids:
+        bad_t1ws_excluded = [bad in args.participant_label_exclude for bad in bad_t1w_subject_ids ]
+
+        if False in bad_t1ws_excluded:
             raise Exception(full_message)
         else:
             print(bad_files_message)
