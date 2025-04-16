@@ -19,6 +19,8 @@ python = ">=3.10, <4.0"
 setuptools = "^68.1.2"
 petutils = "^0.0.1"
 niworkflows = "^1.11.0"
+niftifixer = {git = "https://github.com/openneuropet/nifti_fixer.git"}
+
 
 [tool.poetry.group.dev.dependencies]
 black = "^23.7.0"
