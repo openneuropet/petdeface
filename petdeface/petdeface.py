@@ -31,10 +31,12 @@ try:
     from mideface import ApplyMideface
     from mideface import Mideface
     from pet import WeightedAverage
+    from noanat import copy_default_anat_to_subject,remove_default_anat
 except ModuleNotFoundError:
     from .mideface import ApplyMideface
     from .mideface import Mideface
     from .pet import WeightedAverage
+    from .noanat import copy_default_anat_to_subject, remove_default_anat
 
 
 # collect version from pyproject.toml
@@ -264,6 +266,7 @@ def deface(args: Union[dict, argparse.Namespace]) -> None:
                 anat_only=args.anat_only,
                 session_label=args.session_label,
                 session_label_exclude=args.session_label_exclude,
+                use_template_anat=args.use_template_anat
             )
         except FileNotFoundError:
             single_subject_wf = None
@@ -292,6 +295,7 @@ def init_single_subject_wf(
     anat_only=False,
     session_label=[],
     session_label_exclude=[],
+    use_template_anat=False
 ) -> Workflow:
     """
     Organize the preprocessing pipeline for a single subject.
@@ -310,6 +314,8 @@ def init_single_subject_wf(
     :type session: list, optional
     :param session_label_exclude: _description_, will exclude any session(s) supplied to this argument, defaults to []
     :type session_label_exclude: list, optional
+    :param use_template_anat: _description_, will attempt to deface PET images lacking a T1w with existing template T1w packaged in petdeface, default to False,
+    :type use_template_anat: boolean, optional 
     :raises FileNotFoundError: _description_
     :return: _description_
     :rtype: Workflow
@@ -337,12 +343,22 @@ def init_single_subject_wf(
     else:
         sessions_to_exclude = session_label_exclude
 
+    temp_anat_subjects = []
     # check if any t1w images exist for the pet images
     for pet_image, t1w_image in subject_data.items():
-        if t1w_image == "":
+        if t1w_image == "" and not use_template_anat:
             raise FileNotFoundError(
                 f"Could not find t1w image for pet image {pet_image}"
             )
+        elif t1w_image == "" and use_template_anat:
+            created_items = copy_default_anat_to_subject(bids_data.root, str(pet_image))
+            temp_anat_subjects.append(created_items)
+            subject_data[pet_image] = str(created_items.get("created_files", ["", ""])[0])
+
+
+    # if we're adding in new t1w's and folder's we'll need to refresh the BIDS.layout object to reflect
+    # those new changes
+    bids_data = BIDSLayout(bids_data.root)
 
     bids_dir = bids_data.root
 
@@ -755,6 +771,7 @@ class PetDeface:
         participant_label_exclude=[],
         session_label=[],
         session_label_exclude=[],
+        use_template_anat=False,
     ):
         self.bids_dir = bids_dir
         self.remove_existing = remove_existing
@@ -768,6 +785,7 @@ class PetDeface:
         self.participant_label_exclude = participant_label_exclude
         self.session_label = session_label
         self.session_label_exclude = session_label_exclude
+        self.use_template_anat = use_template_anat
 
         # check if freesurfer license is valid
         self.fs_license = check_valid_fs_license()
@@ -800,6 +818,7 @@ class PetDeface:
                 "participant_label_exclude": self.participant_label_exclude,
                 "session_label": self.session_label,
                 "session_label_exclude": self.session_label_exclude,
+                "use_template_anat": self.use_template_anat
             }
         )
         wrap_up_defacing(
@@ -922,6 +941,12 @@ def cli():
         nargs="+",
         required=False,
         default=[],
+    )
+    parser.add_argument(
+        "--use_template_anat",
+        help="Use a template anat file to deface images without a T1w image.",
+        default=False,
+        action="store_true"
     )
 
     arguments = parser.parse_args()
@@ -1120,6 +1145,7 @@ def main():  # noqa: max-complexity: 12
             participant_label_exclude=args.participant_label_exclude,
             session_label=args.session_label,
             session_label_exclude=args.session_label_exclude,
+            use_template_anat=args.use_template_anat
         )
         petdeface.run()
 
