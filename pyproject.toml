@@ -8,6 +8,8 @@ readme = "README.md"
 include = [
     "petdeface/*",
     "pyproject.toml",
+    "data/sub-01/ses-baseline/anat/sub-01_ses-baseline_T1w.nii",
+    "data/sub-01/ses-baseline/anat/sub-01_ses-baseline_T1w.json",
 ]
 
 # please update the bids version to the latest compliant version when making modifications to this code here
@@ -35,8 +37,11 @@ force_single_line = true
 lines_after_imports = 2
 
 [build-system]
-requires = ["poetry-core"]
+requires = ["poetry-core", "setuptools>=61.0"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.setuptools]
+package-data = { "petdeface" = ["data/sub-01/ses-baseline/anat/*.nii", "data/sub-01/ses-baseline/anat/*.json"] }
 
 [tool.poetry.scripts]
 petdeface = 'petdeface.petdeface:main'
