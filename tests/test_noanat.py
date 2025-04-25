@@ -97,7 +97,8 @@ def test_get_data_path():
     # Test with a file that exists in the data directory
     path = get_data_path("sub-01/ses-baseline/anat/sub-01_ses-baseline_T1w.nii.gz")
     assert path.exists()
-    assert path.suffix == ".nii"
+    assert ".nii" in path.suffixes
+    assert ".gz" in path.suffixes
 
     # Test with a file that doesn't exist
     with pytest.raises(FileNotFoundError):
@@ -106,14 +107,17 @@ def test_get_data_path():
 
 def test_get_default_anat():
     """Test that get_default_anat returns the correct path."""
-    path = get_default_anat()
+    path = get_default_anat(anat="t1")
     assert path.exists()
-    assert path.suffix == ".nii"
+    assert ".nii" in path.suffixes
+    path = get_default_anat(anat="mni")
+    assert path.exists()
+    assert "mni305" in str(path)
 
 
 def test_get_default_anat_data():
     """Test that get_default_anat_data returns a nibabel image."""
-    img = get_default_anat_data()
+    img = get_default_anat_data(anat="t1")
     assert img is not None
     assert len(img.shape) == 3
 

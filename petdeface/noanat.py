@@ -4,6 +4,7 @@ import numpy
 import shutil
 import os
 import re
+import tempfile
 from pathlib import Path
 from typing import Union, Dict, Optional
 
@@ -42,7 +43,7 @@ def get_data_path(filename: str) -> Path:
     return full_path
 
 
-def get_default_anat() -> Path:
+def get_default_anat(anat) -> Path:
     """Get the path to the default anatomical image.
 
     Returns
@@ -51,10 +52,19 @@ def get_default_anat() -> Path:
         Path to the default T1w image that should be used when no anatomical
         image is available for a PET scan.
     """
-    return get_data_path("sub-01/ses-baseline/anat/sub-01_ses-baseline_T1w.nii.gz")
+    if anat == "t1":
+        return get_data_path("sub-01/ses-baseline/anat/sub-01_ses-baseline_T1w.nii.gz")
+    elif anat == "mni":
+        return get_data_path("sub-mni305/anat/sub-mni305_T1w.nii.gz")
+    elif anat == "pet":
+        return tempfile.TemporaryDirectory()
+    else:
+        raise Exception(
+            f"Choice of file for template anat must be one of: t1, mni, or pet. given: {anat}"
+        )
 
 
-def get_default_anat_data() -> nibabel.Nifti1Image:
+def get_default_anat_data(anat) -> nibabel.Nifti1Image:
     """Get the default anatomical image as a nibabel image object.
 
     Returns
@@ -62,7 +72,7 @@ def get_default_anat_data() -> nibabel.Nifti1Image:
     nibabel.Nifti1Image
         The default T1w image loaded as a nibabel image object
     """
-    return nibabel.load(get_default_anat())
+    return nibabel.load(get_default_anat(anat))
 
 
 def extract_subject_id(input_str: str) -> str:
@@ -113,7 +123,12 @@ def extract_subject_id(input_str: str) -> str:
                 )
 
 
-def copy_default_anat_to_subject(bids_dir: Union[str, Path], subject_id: str) -> dict:
+def copy_default_anat_to_subject(
+    bids_dir: Union[str, Path],
+    subject_id: str,
+    pet_image=Union[str, Path],
+    default_anat="t1",
+) -> dict:
     """Copy the default anatomical image to a PET subject's folder in a BIDS dataset.
 
     This function extracts the subject ID from the provided string using regex,
@@ -128,6 +143,11 @@ def copy_default_anat_to_subject(bids_dir: Union[str, Path], subject_id: str) ->
         - Full path (e.g., "/path/to/sub-123/anat/file.nii")
         - Subject ID with prefix (e.g., "sub-123")
         - Raw subject ID (e.g., "123")
+    pet_image: Union[str, Path]
+        Path to the pet image that is lacking an anatomical
+    default_anat : str
+        The anat file to use as a 'default' can be a the t1w, mni, or averaged PET image
+        defaults to the t1w included in this library.
 
     Returns
     -------
@@ -176,23 +196,35 @@ def copy_default_anat_to_subject(bids_dir: Union[str, Path], subject_id: str) ->
         created_dirs.append(anat_dir)
 
     # Define the target file paths
-    target_nii = anat_dir / f"sub-{extracted_id}_T1w.nii"
+    target_nii = anat_dir / f"sub-{extracted_id}_T1w.nii.gz"
     target_json = anat_dir / f"sub-{extracted_id}_T1w.json"
 
     # Get the source file paths
-    source_nii = get_default_anat()
-    source_json = get_data_path("sub-01/ses-baseline/anat/sub-01_ses-baseline_T1w.json")
+    source_nii = get_default_anat(anat=default_anat)
+    if type(source_nii) is tempfile.TemporaryDirectory:
+        # load the pet image for that subject
+        input_image = nibabel.load(pet_image)
+        # average the pet file
+        average = numpy.mean(input_image.dataobj, axis=3)
+        # save the average to the source nifti path, in this case a temp file
+        with source_nii as tmpdirname:
+            save_path = os.path.join(
+                tmpdirname, f"sub-{extracted_id}_desc-totallyat1w.nii.gz"
+            )
+            nibabel.save(nibabel.Nifti1Image(average, input_image.affine), save_path)
+            shutil.copy2(save_path, target_nii)
+    else:
+        shutil.copy2(source_nii, target_nii)
 
-    # Copy the files
+    source_json = get_data_path("sub-01/ses-baseline/anat/sub-01_ses-baseline_T1w.json")
     created_files = []
-    shutil.copy2(source_nii, target_nii)
     created_files.append(target_nii)
 
     shutil.copy2(source_json, target_json)
     created_files.append(target_json)
 
-    print(f"Copied default anatomical image to {target_nii}")
-    print(f"Copied default anatomical metadata to {target_json}")
+    print(f"Copied {default_anat} anatomical image to {target_nii}")
+    print(f"Copied {default_anat} anatomical metadata to {target_json}")
 
     # Return information about created files and directories
     return {

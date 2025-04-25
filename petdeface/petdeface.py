@@ -297,7 +297,7 @@ def init_single_subject_wf(
     anat_only=False,
     session_label=[],
     session_label_exclude=[],
-    use_template_anat=False,
+    use_template_anat=None,
 ) -> Workflow:
     """
     Organize the preprocessing pipeline for a single subject.
@@ -317,7 +317,7 @@ def init_single_subject_wf(
     :param session_label_exclude: _description_, will exclude any session(s) supplied to this argument, defaults to []
     :type session_label_exclude: list, optional
     :param use_template_anat: _description_, will attempt to deface PET images lacking a T1w with existing template T1w packaged in petdeface, default to False,
-    :type use_template_anat: boolean, optional
+    :type use_template_anat: str, optional
     :raises FileNotFoundError: _description_
     :return: _description_
     :rtype: Workflow
@@ -352,7 +352,12 @@ def init_single_subject_wf(
                 f"Could not find t1w image for pet image {pet_image}"
             )
         elif t1w_image == "" and use_template_anat:
-            created_items = copy_default_anat_to_subject(bids_data.root, str(pet_image))
+            created_items = copy_default_anat_to_subject(
+                bids_dir=bids_data.root,
+                subject_id=str(pet_image),
+                pet_image=pet_image,
+                default_anat=use_template_anat,
+            )
             global temp_anat_subjects
             temp_anat_subjects.append(created_items)
             subject_data[pet_image] = str(
@@ -959,9 +964,16 @@ def cli():
     )
     parser.add_argument(
         "--use_template_anat",
-        help="Use a template anat file to deface images without a T1w image.",
-        default=False,
-        action="store_true",
+        choices=["t1", "mni", "pet"],
+        help="Use a template file for PET scans that don't have an anatomical MRI. Template files "
+        "are included in this library, alternatively, if the tracer is amenable "
+        "users can use this argument with 'pet' and create an average of the PET scan "
+        "and substitute it as a T1w image. These template/substitute anatomical files "
+        "are removed from the output after they've been used to deface the PET image."
+        "Choices are: "
+        "t1   -> the sub-01_T1w.nii.gz packaged with this library "
+        "mni  -> the MNI305 atlas included with FreeSurfer"
+        "pet  -> an averaged PET to T1w image taken from the subject missing an MR",
     )
 
     arguments = parser.parse_args()
