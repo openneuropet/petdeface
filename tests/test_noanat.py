@@ -25,7 +25,7 @@ data_dir = Path(__file__).parent.parent / "data"
 def real_nifti_file():
     """Get the path to the real NIfTI file in the data directory."""
     nii_path = (
-        data_dir / "sub-01" / "ses-baseline" / "anat" / "sub-01_ses-baseline_T1w.nii"
+        data_dir / "sub-01" / "ses-baseline" / "anat" / "sub-01_ses-baseline_T1w.nii.gz"
     )
     assert nii_path.exists(), f"Expected NIfTI file not found at {nii_path}"
     return nii_path
@@ -51,7 +51,7 @@ def temp_data_dir(real_nifti_file, real_json_file):
         anat_dir.mkdir(parents=True)
 
         # Copy the real NIfTI file
-        nii_path = anat_dir / "sub-01_ses-baseline_T1w.nii"
+        nii_path = anat_dir / "sub-01_ses-baseline_T1w.nii.gz"
         shutil.copy2(real_nifti_file, nii_path)
 
         # Copy the real JSON file
@@ -95,7 +95,7 @@ def mock_get_default_anat_data(real_nifti_file):
 def test_get_data_path():
     """Test that get_data_path can find files in the data directory."""
     # Test with a file that exists in the data directory
-    path = get_data_path("sub-01/ses-baseline/anat/sub-01_ses-baseline_T1w.nii")
+    path = get_data_path("sub-01/ses-baseline/anat/sub-01_ses-baseline_T1w.nii.gz")
     assert path.exists()
     assert path.suffix == ".nii"
 

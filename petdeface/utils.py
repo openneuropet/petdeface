@@ -11,7 +11,7 @@ def get_data_path(filename: str) -> Path:
     ----------
     filename : str
         Name of the file to get the path for. This should be relative to the data directory.
-        For example: "sub-01/ses-baseline/anat/sub-01_ses-baseline_T1w.nii"
+        For example: "sub-01/ses-baseline/anat/sub-01_ses-baseline_T1w.nii.gz"
 
     Returns
     -------
@@ -41,4 +41,4 @@ def get_default_anat() -> Path:
         Path to the default T1w image that should be used when no anatomical
         image is available for a PET scan.
     """
-    return get_data_path("sub-01/ses-baseline/anat/sub-01_ses-baseline_T1w.nii")
+    return get_data_path("sub-01/ses-baseline/anat/sub-01_ses-baseline_T1w.nii.gz")
