@@ -473,6 +473,9 @@ def init_single_subject_wf(
             # rename registration file to something more descriptive than registration.lta
             # we do this here to account for mulitple runs during the same session
             mricoreg = MRICoreg(reference_file=t1w_file)
+            if use_template_anat:
+                mricoreg.inputs.dof = 12
+            
             mricoreg.inputs.out_lta_file = f"{pet_string}{run_id}_desc-pet2anat_pet.lta"
 
             coreg_pet_to_t1w = Node(mricoreg, "coreg_pet_to_t1w")
