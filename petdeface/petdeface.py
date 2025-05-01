@@ -31,10 +31,12 @@ try:
     from mideface import ApplyMideface
     from mideface import Mideface
     from pet import WeightedAverage
+    from noanat import copy_default_anat_to_subject, remove_default_anat
 except ModuleNotFoundError:
     from .mideface import ApplyMideface
     from .mideface import Mideface
     from .pet import WeightedAverage
+    from .noanat import copy_default_anat_to_subject, remove_default_anat
 
 
 # collect version from pyproject.toml
@@ -47,6 +49,8 @@ __version__ = "unable to locate version number"
 # we use the default version at the time of this writing, but the most current version
 # can be found in the pyproject.toml file under the [tool.bids] section
 __bids_version__ = "1.8.0"
+
+temp_anat_subjects = []
 
 
 if __version__ == "unable to locate version number":
@@ -264,6 +268,7 @@ def deface(args: Union[dict, argparse.Namespace]) -> None:
                 anat_only=args.anat_only,
                 session_label=args.session_label,
                 session_label_exclude=args.session_label_exclude,
+                use_template_anat=args.use_template_anat,
             )
         except FileNotFoundError:
             single_subject_wf = None
@@ -292,6 +297,7 @@ def init_single_subject_wf(
     anat_only=False,
     session_label=[],
     session_label_exclude=[],
+    use_template_anat=None,
 ) -> Workflow:
     """
     Organize the preprocessing pipeline for a single subject.
@@ -310,6 +316,8 @@ def init_single_subject_wf(
     :type session: list, optional
     :param session_label_exclude: _description_, will exclude any session(s) supplied to this argument, defaults to []
     :type session_label_exclude: list, optional
+    :param use_template_anat: _description_, will attempt to deface PET images lacking a T1w with existing template T1w packaged in petdeface, default to False,
+    :type use_template_anat: str, optional
     :raises FileNotFoundError: _description_
     :return: _description_
     :rtype: Workflow
@@ -339,10 +347,26 @@ def init_single_subject_wf(
 
     # check if any t1w images exist for the pet images
     for pet_image, t1w_image in subject_data.items():
-        if t1w_image == "":
+        if t1w_image == "" and not use_template_anat:
             raise FileNotFoundError(
                 f"Could not find t1w image for pet image {pet_image}"
             )
+        elif t1w_image == "" and use_template_anat:
+            created_items = copy_default_anat_to_subject(
+                bids_dir=bids_data.root,
+                subject_id=str(pet_image),
+                pet_image=pet_image,
+                default_anat=use_template_anat,
+            )
+            global temp_anat_subjects
+            temp_anat_subjects.append(created_items)
+            subject_data[pet_image] = str(
+                created_items.get("created_files", ["", ""])[0]
+            )
+
+    # if we're adding in new t1w's and folder's we'll need to refresh the BIDS.layout object to reflect
+    # those new changes
+    bids_data = BIDSLayout(bids_data.root)
 
     bids_dir = bids_data.root
 
@@ -449,6 +473,9 @@ def init_single_subject_wf(
             # rename registration file to something more descriptive than registration.lta
             # we do this here to account for mulitple runs during the same session
             mricoreg = MRICoreg(reference_file=t1w_file)
+            if use_template_anat:
+                mricoreg.inputs.dof = 12
+            
             mricoreg.inputs.out_lta_file = f"{pet_string}{run_id}_desc-pet2anat_pet.lta"
 
             coreg_pet_to_t1w = Node(mricoreg, "coreg_pet_to_t1w")
@@ -611,7 +638,12 @@ def wrap_up_defacing(
                 mapping_dict[defaced] = raw
 
     if placement == "adjacent":
-        if output_dir is None or output_dir == path_to_dataset:
+        if (
+            output_dir is None
+            or output_dir == path_to_dataset
+            or pathlib.Path(output_dir)
+            == pathlib.Path(os.path.join(path_to_dataset, "derivatives", "petdeface"))
+        ):
             final_destination = f"{path_to_dataset}_defaced"
         else:
             final_destination = output_dir
@@ -755,6 +787,7 @@ class PetDeface:
         participant_label_exclude=[],
         session_label=[],
         session_label_exclude=[],
+        use_template_anat=False,
     ):
         self.bids_dir = bids_dir
         self.remove_existing = remove_existing
@@ -768,6 +801,7 @@ class PetDeface:
         self.participant_label_exclude = participant_label_exclude
         self.session_label = session_label
         self.session_label_exclude = session_label_exclude
+        self.use_template_anat = use_template_anat
 
         # check if freesurfer license is valid
         self.fs_license = check_valid_fs_license()
@@ -800,8 +834,16 @@ class PetDeface:
                 "participant_label_exclude": self.participant_label_exclude,
                 "session_label": self.session_label,
                 "session_label_exclude": self.session_label_exclude,
+                "use_template_anat": self.use_template_anat,
             }
         )
+
+        # we want to remove any "t1ws" that we previously substituted in before we copy all
+        # of them into the final directory
+        global temp_anat_subjects
+        for temp_anat_subject in temp_anat_subjects:
+            remove_default_anat(bids_dir=self.bids_dir, created_items=temp_anat_subject)
+
         wrap_up_defacing(
             self.bids_dir,
             self.output_dir,
@@ -922,6 +964,19 @@ def cli():
         nargs="+",
         required=False,
         default=[],
+    )
+    parser.add_argument(
+        "--use_template_anat",
+        choices=["t1", "mni", "pet"],
+        help="Use a template file for PET scans that don't have an anatomical MRI. Template files "
+        "are included in this library, alternatively, if the tracer is amenable "
+        "users can use this argument with 'pet' and create an average of the PET scan "
+        "and substitute it as a T1w image. These template/substitute anatomical files "
+        "are removed from the output after they've been used to deface the PET image."
+        "Choices are: "
+        "t1   -> the sub-01_T1w.nii.gz packaged with this library "
+        "mni  -> the MNI305 atlas included with FreeSurfer"
+        "pet  -> an averaged PET to T1w image taken from the subject missing an MR",
     )
 
     arguments = parser.parse_args()
@@ -1120,6 +1175,7 @@ def main():  # noqa: max-complexity: 12
             participant_label_exclude=args.participant_label_exclude,
             session_label=args.session_label,
             session_label_exclude=args.session_label_exclude,
+            use_template_anat=args.use_template_anat,
         )
         petdeface.run()
 
