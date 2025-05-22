@@ -31,10 +31,12 @@ try:
     from mideface import ApplyMideface
     from mideface import Mideface
     from pet import WeightedAverage
+    from utils import run_validator
 except ModuleNotFoundError:
     from .mideface import ApplyMideface
     from .mideface import Mideface
     from .pet import WeightedAverage
+    from .utils import run_validator
 
 
 # collect version from pyproject.toml
@@ -206,6 +208,10 @@ def deface(args: Union[dict, argparse.Namespace]) -> None:
         args = argparse.Namespace(**args)
     else:
         args = args
+
+    # first check to see if the dataset is bids valid
+    if not args.skip_bids_validator:
+        run_validator(args.bids_dir)
 
     if not check_valid_fs_license() and not locate_freesurfer_license().exists():
         raise Exception("You need a valid FreeSurfer license to proceed!")

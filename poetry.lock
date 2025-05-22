@@ -84,6 +84,21 @@ files = [
 bidsschematools = ">=0.10"
 
 [[package]]
+name = "bids-validator-deno"
+version = "2.0.5"
+description = "Typescript implementation of the BIDS validator"
+optional = false
+python-versions = "*"
+files = [
+    {file = "bids_validator_deno-2.0.5-py2.py3-none-macosx_10_12_x86_64.whl", hash = "sha256:e7b0cd652a92c730ae00ad21e04ee430bc9cddad0bcdf5695a5fa47f17293568"},
+    {file = "bids_validator_deno-2.0.5-py2.py3-none-macosx_11_0_arm64.whl", hash = "sha256:4bc4c8f7d957900df30d7e10f7e07d790925a1a522fcf673b883bafd82e32981"},
+    {file = "bids_validator_deno-2.0.5-py2.py3-none-manylinux_2_17_aarch64.manylinux2014_aarch64.manylinux_2_24_aarch64.whl", hash = "sha256:7b676a27303d4d42b886d448964c1ec2502b1692ba440d51043b20e43778dc13"},
+    {file = "bids_validator_deno-2.0.5-py2.py3-none-manylinux_2_24_x86_64.whl", hash = "sha256:db02e9bd2e7d58967b19a06a87961d4b0a1a41f450289c730f95eb7d184fe790"},
+    {file = "bids_validator_deno-2.0.5-py2.py3-none-win_amd64.whl", hash = "sha256:9462c07aeeeaf9eb07777c14689f1c6cbf2ee7075c825ffde801e3c6d3a5b7e3"},
+    {file = "bids_validator_deno-2.0.5.tar.gz", hash = "sha256:7316a373c0b326f1b9ec541aaeded5f6dc6e77631940ea08c2ce6fdc590e59ae"},
+]
+
+[[package]]
 name = "bidsschematools"
 version = "0.11.3.post3"
 description = "Python tools for working with the BIDS schema."
@@ -1448,6 +1463,24 @@ style = ["tox"]
 test = ["coverage (>=7.2)", "pytest", "pytest-cov", "pytest-doctestplus", "pytest-httpserver", "pytest-xdist"]
 typing = ["tox"]
 zstd = ["pyzstd (>=0.14.3)"]
+
+[[package]]
+name = "niftifixer"
+version = "0.0.0"
+description = "Fixes Nifti's"
+optional = false
+python-versions = ">=3.10, <4.0"
+files = []
+develop = false
+
+[package.dependencies]
+nibabel = "^5.2.1"
+
+[package.source]
+type = "git"
+url = "https://github.com/openneuropet/nifti_fixer.git"
+reference = "HEAD"
+resolved_reference = "a0469bb1ad2ff3d63c12ea536657d4fd9ab76b2c"
 
 [[package]]
 name = "nilearn"
@@ -3228,4 +3261,4 @@ files = [
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.10, <4.0"
-content-hash = "d13eaeabc8d858d5540db6627dec495e106ff940245e5c50b9b2997e6b163b93"
+content-hash = "6de8a7cc6be569cb4483d6784cb54ac7a6ca8cc97ccbb1dee8ee18f41895bd43"
