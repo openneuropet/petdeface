@@ -23,6 +23,7 @@ python = ">=3.10, <4.0"
 setuptools = "^68.1.2"
 petutils = "^0.0.1"
 niworkflows = "^1.11.0"
+matplotlib = "^3.10.1"
 
 [tool.poetry.group.dev.dependencies]
 black = "^23.7.0"
@@ -38,6 +39,7 @@ nbconvert = "^7.16.6"
 ipywidgets = "^8.1.6"
 matplotlib = "^3.10.1"
 pandas = "^2.2.3"
+pyqt6 = "^6.9.0"
 
 [tool.isort]
 profile = "black"
