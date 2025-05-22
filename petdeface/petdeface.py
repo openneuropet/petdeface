@@ -8,11 +8,7 @@ import shutil
 from bids import BIDSLayout
 import importlib
 import glob
-import niftifixer
 from platform import system
-import textwrap
-import re
-
 
 # import shutil
 import subprocess
@@ -257,7 +253,10 @@ def deface(args: Union[dict, argparse.Namespace]) -> None:
     else:
         output_dir = args.output_dir
 
+
     petdeface_wf = Workflow(name="petdeface_wf", base_dir=output_dir)
+
+    missing_file_errors = []
 
     for subject_id in subjects:
         try:
@@ -269,11 +268,16 @@ def deface(args: Union[dict, argparse.Namespace]) -> None:
                 session_label=args.session_label,
                 session_label_exclude=args.session_label_exclude,
             )
-        except FileNotFoundError:
+        except FileNotFoundError as error:
             single_subject_wf = None
-
+            missing_file_errors.append(str(error))
         if single_subject_wf:
             petdeface_wf.add_nodes([single_subject_wf])
+
+    if missing_file_errors: # todo add conditional later for cases where a template t1w is used
+        raise FileNotFoundError(
+            "The following subjects are missing t1w images:\n" + "\n".join(missing_file_errors)
+        )
 
     try:
         petdeface_wf.write_graph("petdeface.dot", graph2use="colored", simple_form=True)
@@ -954,73 +958,11 @@ def main():  # noqa: max-complexity: 12
         args.bids_dir = args.bids_dir.expanduser().resolve()
     else:
         args.bids_dir = args.bids_dir.absolute()
-
     if isinstance(args.output_dir, pathlib.PosixPath) and "~" in str(args.output_dir):
         args.output_dir = args.output_dir.expanduser().resolve()
     else:
         if args.output_dir:
             args.output_dir = args.output_dir.absolute()
-    
-    # Sometimes there are extra dimensions in T1w images, typically the BIDS validator catches these, but
-    # they seem to get past the python of the version of the validator. What we do here is to perform a
-    # check on their dimesionality just incase.
-    check_these_t1ws = niftifixer.locate_t1ws(args.bids_dir)
-    bad_t1ws = []
-    for t1w in check_these_t1ws:
-        nii_info = niftifixer.GetNiftiInfo(t1w)
-        if not nii_info.is_3D:
-            bad_t1ws.append(t1w)
-    if len(bad_t1ws) > 0:
-        # get terminal width
-        try:
-            width = os.get_terminal_size().columns
-        except OSError:
-            width = 80
-        
-        # Regex to extract BIDS subject ID (text after sub- and before the next _)
-        # This pattern ensures we only get the subject ID, not the full path
-        subject_id_pattern = re.compile(r'sub-([^_/]+)')
-        
-        # Extract subject IDs from bad files for exclusion
-        bad_t1w_subject_ids = []
-        for file in bad_t1ws:
-            match = subject_id_pattern.search(str(file))
-            if match:
-                subject_id = match.group(1)
-                bad_t1w_subject_ids.append(subject_id)
-        bad_t1w_subject_ids = list(set(bad_t1w_subject_ids))
-        
-        main_message = (
-            f"Found {len(bad_t1ws)} t1w images with more than 3 dimensions. "
-            f"Reduce dimensionality to 3 for each T1w or exclude subjects with "
-            f"--participant_label_exclude. "
-            f"Or try using niftifixer before re-attempting; niftifixer is installed "
-            f"in the same environment as petdeface."
-        )
-        
-        # Wrap the main message to fit the terminal width
-        wrapped_message = textwrap.fill(main_message, width=width)
-        
-        # print potentially helpful commands on their own lines
-        command_message = f"niftifixer {args.bids_dir}"
-        
-        if bad_t1w_subject_ids:
-            exclude_command = f"petdeface {args.bids_dir} {args.output_dir} --participant_label_exclude {' '.join(bad_t1w_subject_ids)}"
-            command_message += f"\n\nOr exclude problematic subjects:\n\n{exclude_command}"
-        
-        # Format the list of bad files
-        bad_files_message = "These files have too many dimensions ( >3 ):\n" + "\n".join(f"    {file}" for file in bad_t1ws)
-        
-        # Combine all parts of the message
-        full_message = f"{wrapped_message}\n\n{command_message}\n\n{bad_files_message}"
-        
-        # Check if all problematic subjects are already in the exclude list
-        bad_t1ws_excluded = [bad in args.participant_label_exclude for bad in bad_t1w_subject_ids ]
-
-        if False in bad_t1ws_excluded:
-            raise Exception(full_message)
-        else:
-            print(bad_files_message)
 
     if args.docker:
         check_docker_installed()
