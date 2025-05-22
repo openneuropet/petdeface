@@ -253,7 +253,6 @@ def deface(args: Union[dict, argparse.Namespace]) -> None:
     else:
         output_dir = args.output_dir
 
-
     petdeface_wf = Workflow(name="petdeface_wf", base_dir=output_dir)
 
     missing_file_errors = []
@@ -274,9 +273,12 @@ def deface(args: Union[dict, argparse.Namespace]) -> None:
         if single_subject_wf:
             petdeface_wf.add_nodes([single_subject_wf])
 
-    if missing_file_errors: # todo add conditional later for cases where a template t1w is used
+    if (
+        missing_file_errors
+    ):  # todo add conditional later for cases where a template t1w is used
         raise FileNotFoundError(
-            "The following subjects are missing t1w images:\n" + "\n".join(missing_file_errors)
+            "The following subjects are missing t1w images:\n"
+            + "\n".join(missing_file_errors)
         )
 
     try:
