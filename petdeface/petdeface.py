@@ -764,7 +764,7 @@ class PetDeface:
         anat_only=False,
         subject="",
         n_procs=2,
-        skip_bids_validator=True,
+        skip_bids_validator=False,
         remove_existing=True,
         placement="adjacent",
         preview_pics=True,
