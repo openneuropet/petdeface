@@ -5,6 +5,7 @@ from nipype.interfaces.base import File
 from nipype.interfaces.base import TraitedSpec
 from nipype.interfaces.base import traits
 from nipype.interfaces.base import isdefined
+from nipype.interfaces.ants import ApplyTransforms
 import os
 
 

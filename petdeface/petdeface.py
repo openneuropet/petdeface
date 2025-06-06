@@ -22,6 +22,7 @@ from niworkflows.engine.workflows import LiterateWorkflow as Workflow
 from niworkflows.utils.bids import collect_data
 from niworkflows.utils.bids import collect_participants
 from niworkflows.utils.misc import check_valid_fs_license
+from nipype.interfaces.ants import ApplyTransforms, Registration
 
 from petutils.petutils import collect_anat_and_pet
 from importlib.metadata import version
@@ -466,10 +467,63 @@ def init_single_subject_wf(
             # we do this here to account for mulitple runs during the same session
             mricoreg = MRICoreg(reference_file=t1w_file)
             mricoreg.inputs.out_lta_file = f"{pet_string}{run_id}_desc-pet2anat_pet.lta"
-
             coreg_pet_to_t1w = Node(mricoreg, "coreg_pet_to_t1w")
-
             deface_pet = Node(ApplyMideface(in_file=pet_file), name="deface_pet")
+
+            # ANTs version of PET-to-T1w registration (alternative to FreeSurfer MRICoreg)
+            # Load ANTs registration parameters from JSON config file
+            import json
+            config_file = pathlib.Path(__file__).parent / "petref-mni_registration_precise_002.json"
+            with open(config_file, 'r') as f:
+                ants_config = json.load(f)
+            
+            
+            # Create separate datasink for ANTs outputs
+            ants_output_dir = pathlib.Path(bids_dir) / "derivatives" / "ants_pype"
+            ants_output_dir.mkdir(parents=True, exist_ok=True)
+            
+            ants_datasink = Node(
+                DataSink(base_directory=str(ants_output_dir)),
+                name="ants_sink",
+            )
+
+            # Set up ANTs Registration using JSON configuration with **kwargs
+            ants_registration = Node(Registration(
+                # Fixed image (target) - the T1w anatomical
+                fixed_image=[t1w_file],
+                # Moving image (source) will be connected from weighted_average
+                
+                # Override specific parameters for PET-to-T1w (vs PET-to-MNI)
+                output_transform_prefix=f"{pet_string}{run_id}_desc-pet2anat_",
+                
+                # Load all other parameters from JSON config
+                **ants_config
+            ), name="ants_coreg_pet_to_t1w")
+
+            pet_wf.connect([
+                # Connect weighted average PET to ANTs registration as moving image
+                (weighted_average, ants_registration, [("out_file", "moving_image")]),
+                
+                # Save ANTs outputs to separate derivatives/ants_pype directory
+                (ants_registration, ants_datasink, [
+                    ("composite_transform", f"{pet_string.replace('_', '.')}.pet.@ants_composite{run_id}")
+                ]),
+                
+                # Save individual transformation files
+                (ants_registration, ants_datasink, [
+                    ("forward_transforms", f"{pet_string.replace('_', '.')}.pet.@ants_transforms{run_id}")
+                ]),
+                
+                # Save the registered (warped) PET image
+                (ants_registration, ants_datasink, [
+                    ("warped_image", f"{pet_string.replace('_', '.')}.pet.@registered{run_id}")
+                ]),
+                
+                # Note: For defacing with ANTs transforms, you'd need to:
+                # 1. Apply the inverse transform to move the T1w facemask to PET space
+                # 2. Then apply the mask to the original PET image
+                # This would require additional ApplyTransforms nodes
+            ])
 
             pet_wf.connect(
                 [
