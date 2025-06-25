@@ -571,7 +571,13 @@ def write_out_dataset_description_json(input_bids_dir, output_bids_dir=None):
 
 
 def wrap_up_defacing(
-    path_to_dataset, output_dir=None, placement="adjacent", remove_existing=True, participant_label_exclude=[], session_label_exclude=[]
+    path_to_dataset,
+    output_dir=None,
+    placement="adjacent",
+    remove_existing=True,
+    participant_label_exclude=[],
+    session_label_exclude=[],
+    indexer=None,
 ):
     """
     This function maps the output of this pipeline to the original dataset and depending on the
@@ -609,17 +615,21 @@ def wrap_up_defacing(
     :type participant_label_exclude: list, optional
     :param session_label_exclude: Excludes set of sessions from the finalized output
     :type session_label_exclude: list, optional
+    :param indexer: Pre-built BIDSLayoutIndexer with exclusion patterns, defaults to None
+    :type indexer: BIDSLayoutIndexer, optional
     :raises ValueError: _description_
     """
-    subjects_to_exclude = [f"sub-{sub}/*" for sub in participant_label_exclude]
-    sessions_to_exclude = [f"*ses-{ses}/*" for ses in session_label_exclude]
-    exclude_total = subjects_to_exclude + sessions_to_exclude
-    
-    # build an indexer
-    exclude = BIDSLayoutIndexer(ignore=exclude_total)
-    
-    # get bids layout of dataset
-    layout = BIDSLayout(path_to_dataset, derivatives=True, validate=False, indexer=exclude)
+    # Use provided indexer or create one from exclude lists (fallback for compatibility)
+    if indexer is None:
+        subjects_to_exclude = [f"sub-{sub}/*" for sub in participant_label_exclude]
+        sessions_to_exclude = [f"*ses-{ses}/*" for ses in session_label_exclude]
+        exclude_total = subjects_to_exclude + sessions_to_exclude
+        indexer = BIDSLayoutIndexer(ignore=exclude_total)
+
+    # get bids layout of dataset using the indexer
+    layout = BIDSLayout(
+        path_to_dataset, derivatives=True, validate=False, indexer=indexer
+    )
 
     # collect defaced images
     try:
@@ -632,10 +642,9 @@ def wrap_up_defacing(
         sys.exit(1)
 
     # collect all original images and jsons
-    raw_only = BIDSLayout(path_to_dataset, derivatives=False, indexer=exclude)
-    
-    raw_images_only = raw_only.get(
-        suffix=["pet", "T1w"])
+    raw_only = BIDSLayout(path_to_dataset, derivatives=False, indexer=indexer)
+
+    raw_images_only = raw_only.get(suffix=["pet", "T1w"])
 
     # if output_dir is not None and is not the same as the input dir we want to clear it out
     if output_dir is not None and output_dir != path_to_dataset and remove_existing:
@@ -810,6 +819,9 @@ class PetDeface:
         self.session_label = session_label
         self.session_label_exclude = session_label_exclude
 
+        # Build comprehensive exclusion indexer considering both include and exclude parameters
+        self.exclude_indexer = self._build_exclusion_indexer()
+
         # check if freesurfer license is valid
         self.fs_license = check_valid_fs_license()
         if not self.fs_license:
@@ -820,6 +832,64 @@ class PetDeface:
                 print(
                     f"Using freesurfer license at {self.fs_license} found in system env at $FREESURFER_LICENSE"
                 )
+
+    def _build_exclusion_indexer(self):
+        """
+        Build a comprehensive BIDSLayoutIndexer that excludes subjects and sessions based on:
+        1. Explicit exclusion lists (participant_label_exclude, session_label_exclude)
+        2. Implicit exclusions from include-only lists (participant_label, session_label)
+
+        Returns:
+            BIDSLayoutIndexer: Indexer configured to ignore excluded subjects/sessions
+        """
+        # Create a temporary layout to get all available subjects and sessions
+        temp_layout = BIDSLayout(self.bids_dir, derivatives=False, validate=False)
+        all_subjects = temp_layout.get_subjects()
+        all_sessions = temp_layout.get_sessions()
+
+        # Start with explicitly excluded subjects
+        excluded_subjects = set(self.participant_label_exclude)
+
+        # If specific subjects are requested (include-only), exclude all others
+        if self.subject and self.subject != "":
+            # Handle both string and list formats
+            if isinstance(self.subject, str):
+                included_subjects = [self.subject] if self.subject else []
+            else:
+                included_subjects = self.subject
+
+            # Remove 'sub-' prefix if present
+            included_subjects = [sub.replace("sub-", "") for sub in included_subjects]
+
+            # Add all subjects not in the include list to exclusions
+            excluded_subjects.update(
+                sub for sub in all_subjects if sub not in included_subjects
+            )
+
+        # Start with explicitly excluded sessions
+        excluded_sessions = set(self.session_label_exclude)
+
+        # If specific sessions are requested (include-only), exclude all others
+        if self.session_label:
+            # Remove 'ses-' prefix if present
+            included_sessions = [ses.replace("ses-", "") for ses in self.session_label]
+
+            # Add all sessions not in the include list to exclusions
+            excluded_sessions.update(
+                ses for ses in all_sessions if ses not in included_sessions
+            )
+
+        # Convert to ignore patterns for BIDSLayoutIndexer
+        ignore_patterns = []
+
+        # Add subject exclusion patterns
+        ignore_patterns.extend([f"sub-{sub}/*" for sub in excluded_subjects])
+
+        # Add session exclusion patterns
+        ignore_patterns.extend([f"*/ses-{ses}/*" for ses in excluded_sessions])
+
+        # Build and return the indexer
+        return BIDSLayoutIndexer(ignore=ignore_patterns)
 
     def run(self):
         """
@@ -849,7 +919,8 @@ class PetDeface:
             placement=self.placement,
             remove_existing=self.remove_existing,
             participant_label_exclude=self.participant_label_exclude,
-            session_label_exclude=self.session_label_exclude
+            session_label_exclude=self.session_label_exclude,
+            indexer=self.exclude_indexer,
         )
 
 

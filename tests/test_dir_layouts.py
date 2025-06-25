@@ -124,6 +124,7 @@ def test_anat_in_subject_folder():
         )
         petdeface.run()
 
+
 def test_no_anat():
     # create a temporary directory to copy the existing dataset into
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -136,16 +137,14 @@ def test_no_anat():
         # run petdeface on the copied dataset
         petdeface = PetDeface(
             Path(tmpdir) / "no_anat",
-            output_dir=Path(tmpdir)
-            / "no_anat_defaced"
-            / "derivatives"
-            / "petdeface",
+            output_dir=Path(tmpdir) / "no_anat_defaced" / "derivatives" / "petdeface",
             n_procs=nthreads,
         )
-    
+
         # now we want to assert that this pipeline crashes and print the error
         with pytest.raises(FileNotFoundError) as exc_info:
             petdeface.run()
+
 
 def test_invalid_bids():
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -155,19 +154,17 @@ def test_invalid_bids():
         pet_folder = subject_folder / "ses-baseline" / "pet"
         for file in pet_folder.glob("sub-01_*"):
             shutil.move(
-                file,
-                pet_folder / file.name.replace("sub-01", "sub-01-bestsubject")
+                file, pet_folder / file.name.replace("sub-01", "sub-01-bestsubject")
             )
-            
+
         # run petdeface on the invalid dataset
         petdeface = PetDeface(
             Path(tmpdir) / "invalid",
             output_dir=Path(tmpdir) / "invalid_defaced" / "derivatives" / "petdeface",
             n_procs=nthreads,
         )
-        
+
         # Run it and see what error gets raised
         with pytest.raises(InvalidBIDSDataset) as exc_info:
             petdeface.run()
         assert "Dataset at" in str(exc_info.value)
-        
