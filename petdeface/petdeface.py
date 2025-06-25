@@ -5,7 +5,7 @@ import pathlib
 import re
 import sys
 import shutil
-from bids import BIDSLayout
+from bids import BIDSLayout, BIDSLayoutIndexer
 import importlib
 import glob
 from platform import system
@@ -297,7 +297,10 @@ def deface(args: Union[dict, argparse.Namespace]) -> None:
     write_out_dataset_description_json(args.bids_dir)
 
     # remove temp outputs - this is commented out to enable easier testing for now
-    shutil.rmtree(os.path.join(output_dir, "petdeface_wf"))
+    if not str(os.getenv("DEBUG", "false")).lower() == "true":
+        shutil.rmtree(os.path.join(output_dir, "petdeface_wf"))
+
+    return {"subjects": subjects}
 
 
 def init_single_subject_wf(
@@ -450,6 +453,14 @@ def init_single_subject_wf(
             if ses_id.replace("ses-", "") in sessions_to_exclude:
                 continue
 
+            # collect tracer
+            if re.search("trc-[^_|\/]*", str(pet_file)):
+                pet_string += "_" + re.search("trc-[^_|\/]*", str(pet_file)).group(0)
+
+            # collect recontstruction
+            if re.search("rec-[^_|\/]*", str(pet_file)):
+                pet_string += "_" + re.search("rec-[^_|\/]*", str(pet_file)).group(0)
+
             # collect run info from pet file
             try:
                 run_id = "_" + re.search("run-[^_|\/]*", str(pet_file)).group(0)
@@ -560,7 +571,7 @@ def write_out_dataset_description_json(input_bids_dir, output_bids_dir=None):
 
 
 def wrap_up_defacing(
-    path_to_dataset, output_dir=None, placement="adjacent", remove_existing=True
+    path_to_dataset, output_dir=None, placement="adjacent", remove_existing=True, participant_label_exclude=[], session_label_exclude=[]
 ):
     """
     This function maps the output of this pipeline to the original dataset and depending on the
@@ -596,8 +607,15 @@ def wrap_up_defacing(
     :type remove_existing: bool, optional
     :raises ValueError: _description_
     """
+    subjects_to_exclude = [f"sub-{sub}/*" for sub in participant_label_exclude]
+    sessions_to_exclude = [f"*ses-{ses}/*" for ses in session_label_exclude]
+    exclude_total = subjects_to_exclude + sessions_to_exclude
+    
+    # build an indexer
+    exclude = BIDSLayoutIndexer(ignore=exclude_total)
+    
     # get bids layout of dataset
-    layout = BIDSLayout(path_to_dataset, derivatives=True)
+    layout = BIDSLayout(path_to_dataset, derivatives=True, validate=False, indexer=exclude)
 
     # collect defaced images
     try:
@@ -610,8 +628,10 @@ def wrap_up_defacing(
         sys.exit(1)
 
     # collect all original images and jsons
-    raw_only = BIDSLayout(path_to_dataset, derivatives=False)
-    raw_images_only = raw_only.get(suffix=["pet", "T1w"])
+    raw_only = BIDSLayout(path_to_dataset, derivatives=False, indexer=exclude)
+    
+    raw_images_only = raw_only.get(
+        suffix=["pet", "T1w"])
 
     # if output_dir is not None and is not the same as the input dir we want to clear it out
     if output_dir is not None and output_dir != path_to_dataset and remove_existing:
@@ -678,8 +698,9 @@ def wrap_up_defacing(
             desc="defaced",
             return_type="file",
         )
-        for extraneous in derivatives:
-            os.remove(extraneous)
+        if str(os.getenv("DEBUG", "false")).lower() != "true":
+            for extraneous in derivatives:
+                os.remove(extraneous)
 
     elif placement == "derivatives":
         pass
@@ -823,6 +844,8 @@ class PetDeface:
             self.output_dir,
             placement=self.placement,
             remove_existing=self.remove_existing,
+            participant_label_exclude=self.participant_label_exclude,
+            session_label_exclude=self.session_label_exclude
         )
 
 
