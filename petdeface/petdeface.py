@@ -297,7 +297,7 @@ def deface(args: Union[dict, argparse.Namespace]) -> None:
     write_out_dataset_description_json(args.bids_dir)
 
     # remove temp outputs - this is commented out to enable easier testing for now
-    if not str(os.getenv("DEBUG", "false")).lower() == "true":
+    if str(os.getenv("DEBUG", "false")).lower() != "true":
         shutil.rmtree(os.path.join(output_dir, "petdeface_wf"))
 
     return {"subjects": subjects}
