@@ -605,6 +605,10 @@ def wrap_up_defacing(
     :type placement: str, optional
     :param remove_existing: _description_, defaults to True
     :type remove_existing: bool, optional
+    :param participant_label_exclude: Excludes set of participants from the finalized output
+    :type participant_label_exclude: list, optional
+    :param session_label_exclude: Excludes set of sessions from the finalized output
+    :type session_label_exclude: list, optional
     :raises ValueError: _description_
     """
     subjects_to_exclude = [f"sub-{sub}/*" for sub in participant_label_exclude]
