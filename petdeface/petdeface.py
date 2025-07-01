@@ -665,8 +665,27 @@ def wrap_up_defacing(
         else:
             final_destination = output_dir
 
-        # copy original dataset to new location
+        # copy original dataset to new location, respecting exclusions
         for entry in raw_only.files:
+            # Check if this file belongs to an excluded subject
+            should_exclude = False
+            for excluded_subject in participant_label_exclude:
+                # Handle both cases: excluded_subject with or without 'sub-' prefix
+                if excluded_subject.startswith('sub-'):
+                    subject_pattern = f"/{excluded_subject}/"
+                    subject_pattern_underscore = f"/{excluded_subject}_"
+                else:
+                    subject_pattern = f"/sub-{excluded_subject}/"
+                    subject_pattern_underscore = f"/sub-{excluded_subject}_"
+                
+                if subject_pattern in entry or subject_pattern_underscore in entry:
+                    should_exclude = True
+                    break
+            
+            # Skip excluded subject files, but copy everything else (including dataset-level files)
+            if should_exclude:
+                continue
+                
             copy_path = entry.replace(str(path_to_dataset), str(final_destination))
             pathlib.Path(copy_path).parent.mkdir(
                 parents=True, exist_ok=True, mode=0o775

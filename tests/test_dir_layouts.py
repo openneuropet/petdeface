@@ -127,41 +127,55 @@ def test_anat_in_subject_folder():
 
 def test_participant_exclusion():
     """Test that participant exclusion works correctly by excluding sub-02"""
-    # Use a fixed directory path for caching/faster iteration
-    test_dir = Path("/tmp/petdeface_test_participant_exclusion")
-    
-    # Only copy data if it doesn't exist (for caching)
-    if not test_dir.exists():
-        test_dir.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory() as temp_dir:
+        test_dir = Path(temp_dir)
+        
+        # Create the test directory and copy our data
         shutil.copytree(data_dir, test_dir / "participant_exclusion")
 
-    # run petdeface on the copied dataset, excluding sub-02
-    petdeface = PetDeface(
-        test_dir / "participant_exclusion",
-        output_dir=test_dir / "derivatives" / "petdeface",
-        n_procs=nthreads,
-        preview_pics=False,
-        placement="adjacent",
-        participant_label_exclude=["sub-02"],  # Exclude sub-02
-    )
-    petdeface.run()
+        # run petdeface on the copied dataset, excluding sub-02
+        petdeface = PetDeface(
+            test_dir / "participant_exclusion",
+            n_procs=nthreads,
+            preview_pics=False,
+            placement="adjacent",
+            participant_label_exclude=["sub-02"],  # Exclude sub-02
+        )
+        petdeface.run()
 
-    # Check the final defaced dataset directory
-    final_defaced_dir = test_dir / "participant_exclusion_defaced"
-    
-    # Verify that sub-02 does NOT appear anywhere in the final defaced dataset
-    sub02_entries = list(final_defaced_dir.glob("**/sub-02*"))
-    assert len(sub02_entries) == 0, f"sub-02 should be completely excluded from final defaced dataset, but found: {sub02_entries}"
-    
-    # Verify that sub-01 exists and was processed
-    assert (final_defaced_dir / "sub-01").exists(), "sub-01 should exist in final defaced dataset"
-    
-    # Verify processing artifacts exist for sub-01
-    derivatives_dir = final_defaced_dir / "derivatives" / "petdeface"
-    sub01_defacemasks = list(derivatives_dir.glob("**/sub-01*defacemask*"))
-    sub01_lta_files = list(derivatives_dir.glob("**/sub-01*.lta"))
-    assert len(sub01_defacemasks) > 0, "sub-01 should have been processed and have defacemasks"
-    assert len(sub01_lta_files) > 0, "sub-01 should have been processed and have lta registration files"
+        # Check the final defaced dataset directory
+        final_defaced_dir = test_dir / "participant_exclusion_defaced"
+        
+        # Count files in the final defaced dataset
+        all_files = list(final_defaced_dir.rglob("*"))
+        all_files = [f for f in all_files if f.is_file()]  # Only files, not directories
+        
+        # Count files by subject
+        sub01_files = [f for f in all_files if "sub-01" in str(f)]
+        sub02_files = [f for f in all_files if "sub-02" in str(f)]
+        
+        print(f"Total files in defaced dataset: {len(all_files)}")
+        print(f"sub-01 files: {len(sub01_files)}")
+        print(f"sub-02 files: {len(sub02_files)}")
+        
+        # Verify that sub-02 does NOT appear anywhere in the final defaced dataset
+        assert len(sub02_files) == 0, f"sub-02 should be completely excluded from final defaced dataset, but found {len(sub02_files)} files: {[str(f) for f in sub02_files]}"
+        
+        # Verify that sub-01 exists and was processed
+        assert len(sub01_files) > 0, "sub-01 should exist in final defaced dataset"
+        assert (final_defaced_dir / "sub-01").exists(), "sub-01 directory should exist in final defaced dataset"
+        
+        # Verify processing artifacts exist for sub-01 in derivatives
+        derivatives_dir = final_defaced_dir / "derivatives" / "petdeface"
+        if derivatives_dir.exists():
+            sub01_defacemasks = list(derivatives_dir.glob("**/sub-01*defacemask*"))
+            sub01_lta_files = list(derivatives_dir.glob("**/sub-01*.lta"))
+            
+            print(f"sub-01 defacemasks found: {len(sub01_defacemasks)}")
+            print(f"sub-01 lta files found: {len(sub01_lta_files)}")
+            
+            assert len(sub01_defacemasks) > 0, "sub-01 should have been processed and have defacemasks"
+            assert len(sub01_lta_files) > 0, "sub-01 should have been processed and have lta registration files"
 
 
 def test_no_anat():
