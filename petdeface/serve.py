@@ -15,6 +15,7 @@ import imageio
 import multiprocessing as mp
 from functools import partial
 import seaborn as sns
+from PIL import Image, ImageDraw
 
 
 def create_overlay_comparison(orig_path, defaced_path, subject_id, output_dir):
@@ -87,6 +88,44 @@ def create_animated_gif(orig_path, defaced_path, subject_id, output_dir, n_slice
     return gif_file
 
 
+def create_overlay_gif(image_files, subject_id, output_dir):
+    """Create an animated GIF switching between original and defaced."""
+
+    # Load the PNG images
+    orig_png_path = os.path.join(output_dir, image_files[0][2])  # original image
+    defaced_png_path = os.path.join(output_dir, image_files[1][2])  # defaced image
+
+    # Open images
+    orig_img = Image.open(orig_png_path)
+    defaced_img = Image.open(defaced_png_path)
+
+    # Ensure same size
+    if orig_img.size != defaced_img.size:
+        defaced_img = defaced_img.resize(orig_img.size, Image.Resampling.LANCZOS)
+
+    # Create frames for the GIF
+    frames = []
+
+    # Frame 1: Original
+    frames.append(orig_img.copy())
+
+    # Frame 2: Defaced
+    frames.append(defaced_img.copy())
+
+    # Save as GIF
+    gif_filename = f"overlay_{subject_id}.gif"
+    gif_path = os.path.join(output_dir, gif_filename)
+    frames[0].save(
+        gif_path,
+        save_all=True,
+        append_images=frames[1:],
+        duration=1500,  # 1.5 seconds per frame
+        loop=0,
+    )
+
+    return gif_filename
+
+
 def load_and_preprocess_image(img_path):
     """Load image and take mean if it has more than 3 dimensions."""
     img = nib.load(img_path)
@@ -105,7 +144,14 @@ def load_and_preprocess_image(img_path):
     return img
 
 
-def create_comparison_html(orig_path, defaced_path, subject_id, output_dir):
+def create_comparison_html(
+    orig_path,
+    defaced_path,
+    subject_id,
+    output_dir,
+    display_mode="side-by-side",
+    size="compact",
+):
     """Create HTML comparison page for a subject using nilearn ortho views."""
 
     # Get basenames for display
@@ -201,6 +247,11 @@ def create_comparison_html(orig_path, defaced_path, subject_id, output_dir):
 
         image_files.append((label, basename, png_filename))
 
+    # Create overlay GIF if we have both images
+    if len(image_files) == 2:
+        overlay_gif = create_overlay_gif(image_files, subject_id, output_dir)
+        image_files.append(("overlay", "comparison", overlay_gif))
+
     # Create the comparison HTML with embedded images
     html_content = f"""
     <!DOCTYPE html>
@@ -213,6 +264,7 @@ def create_comparison_html(orig_path, defaced_path, subject_id, output_dir):
                 font-family: Arial, sans-serif;
                 margin: 20px;
                 background: #f5f5f5;
+                scroll-behavior: smooth;
             }}
             .header {{
                 text-align: center;
@@ -222,21 +274,22 @@ def create_comparison_html(orig_path, defaced_path, subject_id, output_dir):
             .comparison {{
                 display: flex;
                 justify-content: center;
-                gap: 20px;
+                gap: {20 if size == "compact" else 40}px;
                 margin-bottom: 20px;
             }}
             .viewer {{
                 background: white;
-                padding: 20px;
+                padding: {20 if size == "compact" else 30}px;
                 border-radius: 10px;
                 box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
                 text-align: center;
                 flex: 1;
-                max-width: 50%;
+                max-width: {45 if size == "compact" else 48}%;
             }}
             .viewer h3 {{
                 margin-top: 0;
                 color: #2c3e50;
+                font-size: {14 if size == "compact" else 18}px;
             }}
             .viewer img {{
                 width: 100%;
@@ -244,9 +297,86 @@ def create_comparison_html(orig_path, defaced_path, subject_id, output_dir):
                 border-radius: 8px;
                 box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
             }}
+            .navigation {{
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                background: white;
+                padding: 15px;
+                border-radius: 10px;
+                box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+                z-index: 1000;
+            }}
+            .nav-button {{
+                display: block;
+                margin: 5px 0;
+                padding: 8px 12px;
+                background: #3498db;
+                color: white;
+                border: none;
+                border-radius: 5px;
+                cursor: pointer;
+                font-size: 12px;
+                text-decoration: none;
+            }}
+            .nav-button:hover {{
+                background: #2980b9;
+            }}
+            .nav-button:disabled {{
+                background: #bdc3c7;
+                cursor: not-allowed;
+            }}
         </style>
+        <script>
+            function scrollToComparison(direction) {{
+                const comparisons = document.querySelectorAll('.comparison');
+                const currentScroll = window.pageYOffset;
+                const windowHeight = window.innerHeight;
+                
+                let targetComparison = null;
+                
+                if (direction === 'next') {{
+                    for (let comp of comparisons) {{
+                        if (comp.offsetTop > currentScroll + 100) {{
+                            targetComparison = comp;
+                            break;
+                        }}
+                    }}
+                }} else if (direction === 'prev') {{
+                    for (let i = comparisons.length - 1; i >= 0; i--) {{
+                        if (comparisons[i].offsetTop < currentScroll - 100) {{
+                            targetComparison = comparisons[i];
+                            break;
+                        }}
+                    }}
+                }}
+                
+                if (targetComparison) {{
+                    targetComparison.scrollIntoView({{ behavior: 'smooth', block: 'center' }});
+                }}
+            }}
+            
+            // Keyboard navigation
+            document.addEventListener('keydown', function(e) {{
+                if (e.key === 'ArrowDown' || e.key === ' ') {{
+                    e.preventDefault();
+                    scrollToComparison('next');
+                }} else if (e.key === 'ArrowUp') {{
+                    e.preventDefault();
+                    scrollToComparison('prev');
+                }}
+            }});
+        </script>
     </head>
     <body>
+        <div class="navigation">
+            <button class="nav-button" onclick="scrollToComparison('prev')">↑ Previous</button>
+            <button class="nav-button" onclick="scrollToComparison('next')">↓ Next</button>
+            <div style="margin-top: 10px; font-size: 10px; color: #666;">
+                Use arrow keys or spacebar
+            </div>
+        </div>
+        
         <div class="header">
             <h1>PET Deface Comparison - {subject_id}</h1>
             <p>Side-by-side comparison of original vs defaced neuroimaging data</p>
@@ -255,8 +385,10 @@ def create_comparison_html(orig_path, defaced_path, subject_id, output_dir):
         <div class="comparison">
     """
 
-    # Add images side by side
-    html_content += f"""
+    # Add content based on display mode
+    if display_mode == "side-by-side":
+        # Add images side by side only
+        html_content += f"""
             <div class="viewer">
                 <h3>{image_files[0][0].title()}: {image_files[0][1]}</h3>
                 <img src="{image_files[0][2]}" alt="{image_files[0][0].title()}: {image_files[0][1]}">
@@ -266,7 +398,24 @@ def create_comparison_html(orig_path, defaced_path, subject_id, output_dir):
                 <img src="{image_files[1][2]}" alt="{image_files[1][0].title()}: {image_files[1][1]}">
             </div>
         </div>
-        
+        """
+    elif display_mode == "gif":
+        # Show only the GIF
+        if len(image_files) > 2:
+            html_content += f"""
+            <div style="text-align: center;">
+                <h3>Animated Comparison</h3>
+                <p>Switching between Original and Defaced images</p>
+                <img src="{image_files[2][2]}" alt="Animated comparison" style="max-width: 90%; border-radius: 8px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);">
+            </div>
+        </div>
+        """
+        else:
+            html_content += """
+        </div>
+        """
+
+    html_content += """
         <div style="text-align: center; margin-top: 30px;">
             <a href="index.html">← Back to Index</a>
         </div>
@@ -282,12 +431,17 @@ def create_comparison_html(orig_path, defaced_path, subject_id, output_dir):
     return comparison_file
 
 
-def process_subject(subject, output_dir):
+def process_subject(subject, output_dir, size="compact"):
     """Process a single subject (for parallel processing)."""
     print(f"Processing {subject['id']}...")
     try:
         comparison_file = create_comparison_html(
-            subject["orig_path"], subject["defaced_path"], subject["id"], output_dir
+            subject["orig_path"],
+            subject["defaced_path"],
+            subject["id"],
+            output_dir,
+            "side-by-side",  # Always generate side-by-side for individual pages
+            size,
         )
         print(f"  Completed: {subject['id']}")
         return comparison_file
@@ -356,10 +510,9 @@ def build_subjects_from_datasets(orig_dir, defaced_dir):
     return subjects
 
 
-def create_index_html(subjects, output_dir):
-    """Create index page with all comparisons embedded directly."""
+def create_side_by_side_index_html(subjects, output_dir, size="compact"):
+    """Create index page for side-by-side comparisons."""
 
-    # Generate all comparison images first
     comparisons_html = ""
     for subject in subjects:
         subject_id = subject["id"]
@@ -391,12 +544,13 @@ def create_index_html(subjects, output_dir):
     <html>
     <head>
         <meta charset="utf-8">
-        <title>PET Deface Comparisons</title>
+        <title>PET Deface Comparisons - Side by Side</title>
         <style>
             body {{
                 font-family: Arial, sans-serif;
                 margin: 20px;
                 background: #f5f5f5;
+                scroll-behavior: smooth;
             }}
             .header {{
                 text-align: center;
@@ -406,7 +560,7 @@ def create_index_html(subjects, output_dir):
             .subject-comparison {{
                 background: white;
                 margin-bottom: 40px;
-                padding: 30px;
+                padding: {30 if size == "compact" else 40}px;
                 border-radius: 15px;
                 box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
             }}
@@ -415,12 +569,12 @@ def create_index_html(subjects, output_dir):
                 margin-top: 0;
                 margin-bottom: 20px;
                 text-align: center;
-                font-size: 1.5em;
+                font-size: {1.5 if size == "compact" else 2}em;
             }}
             .comparison-grid {{
                 display: grid;
                 grid-template-columns: 1fr 1fr;
-                gap: 30px;
+                gap: {30 if size == "compact" else 40}px;
                 align-items: start;
             }}
             .viewer {{
@@ -429,7 +583,7 @@ def create_index_html(subjects, output_dir):
             .viewer h3 {{
                 color: #34495e;
                 margin-bottom: 15px;
-                font-size: 1.1em;
+                font-size: {1.1 if size == "compact" else 1.3}em;
             }}
             .viewer img {{
                 width: 100%;
@@ -437,12 +591,88 @@ def create_index_html(subjects, output_dir):
                 border-radius: 8px;
                 box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
             }}
+            .navigation {{
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                background: white;
+                padding: 15px;
+                border-radius: 10px;
+                box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+                z-index: 1000;
+            }}
+            .nav-button {{
+                display: block;
+                margin: 5px 0;
+                padding: 8px 12px;
+                background: #3498db;
+                color: white;
+                border: none;
+                border-radius: 5px;
+                cursor: pointer;
+                font-size: 12px;
+                text-decoration: none;
+            }}
+            .nav-button:hover {{
+                background: #2980b9;
+            }}
+            .nav-button:disabled {{
+                background: #bdc3c7;
+                cursor: not-allowed;
+            }}
         </style>
+        <script>
+            function scrollToComparison(direction) {{
+                const comparisons = document.querySelectorAll('.subject-comparison');
+                const currentScroll = window.pageYOffset;
+                
+                let targetComparison = null;
+                
+                if (direction === 'next') {{
+                    for (let comp of comparisons) {{
+                        if (comp.offsetTop > currentScroll + 100) {{
+                            targetComparison = comp;
+                            break;
+                        }}
+                    }}
+                }} else if (direction === 'prev') {{
+                    for (let i = comparisons.length - 1; i >= 0; i--) {{
+                        if (comparisons[i].offsetTop < currentScroll - 100) {{
+                            targetComparison = comparisons[i];
+                            break;
+                        }}
+                    }}
+                }}
+                
+                if (targetComparison) {{
+                    targetComparison.scrollIntoView({{ behavior: 'smooth', block: 'center' }});
+                }}
+            }}
+            
+            // Keyboard navigation
+            document.addEventListener('keydown', function(e) {{
+                if (e.key === 'ArrowDown' || e.key === ' ') {{
+                    e.preventDefault();
+                    scrollToComparison('next');
+                }} else if (e.key === 'ArrowUp') {{
+                    e.preventDefault();
+                    scrollToComparison('prev');
+                }}
+            }});
+        </script>
     </head>
     <body>
+        <div class="navigation">
+            <button class="nav-button" onclick="scrollToComparison('prev')">↑ Previous</button>
+            <button class="nav-button" onclick="scrollToComparison('next')">↓ Next</button>
+            <div style="margin-top: 10px; font-size: 10px; color: #666;">
+                Use arrow keys or spacebar
+            </div>
+        </div>
+        
         <div class="header">
-            <h1>PET Deface Comparisons</h1>
-            <p>Side-by-side comparison of original vs defaced neuroimaging data for all subjects</p>
+            <h1>PET Deface Comparisons - Side by Side</h1>
+            <p>Static side-by-side comparison of original vs defaced neuroimaging data</p>
         </div>
         
         <div class="comparisons-container">
@@ -452,7 +682,156 @@ def create_index_html(subjects, output_dir):
     </html>
     """
 
-    index_file = os.path.join(output_dir, "index.html")
+    index_file = os.path.join(output_dir, "side_by_side.html")
+    with open(index_file, "w") as f:
+        f.write(html_content)
+
+    return index_file
+
+
+def create_gif_index_html(subjects, output_dir, size="compact"):
+    """Create index page for GIF comparisons."""
+
+    comparisons_html = ""
+    for subject in subjects:
+        subject_id = subject["id"]
+        overlay_gif = f"overlay_{subject_id}.gif"
+
+        comparisons_html += f"""
+        <div class="subject-comparison">
+            <h2>{subject_id}</h2>
+            <div style="text-align: center;">
+                <h3>Animated Comparison</h3>
+                <p>Switching between Original and Defaced images</p>
+                <img src="{overlay_gif}" alt="Animated comparison" style="max-width: 90%; border-radius: 8px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);">
+            </div>
+        </div>
+        """
+
+    html_content = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="utf-8">
+        <title>PET Deface Comparisons - Animated</title>
+        <style>
+            body {{
+                font-family: Arial, sans-serif;
+                margin: 20px;
+                background: #f5f5f5;
+                scroll-behavior: smooth;
+            }}
+            .header {{
+                text-align: center;
+                margin-bottom: 30px;
+                color: #333;
+            }}
+            .subject-comparison {{
+                background: white;
+                margin-bottom: 40px;
+                padding: {30 if size == "compact" else 40}px;
+                border-radius: 15px;
+                box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            }}
+            .subject-comparison h2 {{
+                color: #2c3e50;
+                margin-top: 0;
+                margin-bottom: 20px;
+                text-align: center;
+                font-size: {1.5 if size == "compact" else 2}em;
+            }}
+            .navigation {{
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                background: white;
+                padding: 15px;
+                border-radius: 10px;
+                box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+                z-index: 1000;
+            }}
+            .nav-button {{
+                display: block;
+                margin: 5px 0;
+                padding: 8px 12px;
+                background: #3498db;
+                color: white;
+                border: none;
+                border-radius: 5px;
+                cursor: pointer;
+                font-size: 12px;
+                text-decoration: none;
+            }}
+            .nav-button:hover {{
+                background: #2980b9;
+            }}
+            .nav-button:disabled {{
+                background: #bdc3c7;
+                cursor: not-allowed;
+            }}
+        </style>
+        <script>
+            function scrollToComparison(direction) {{
+                const comparisons = document.querySelectorAll('.subject-comparison');
+                const currentScroll = window.pageYOffset;
+                
+                let targetComparison = null;
+                
+                if (direction === 'next') {{
+                    for (let comp of comparisons) {{
+                        if (comp.offsetTop > currentScroll + 100) {{
+                            targetComparison = comp;
+                            break;
+                        }}
+                    }}
+                }} else if (direction === 'prev') {{
+                    for (let i = comparisons.length - 1; i >= 0; i--) {{
+                        if (comparisons[i].offsetTop < currentScroll - 100) {{
+                            targetComparison = comparisons[i];
+                            break;
+                        }}
+                    }}
+                }}
+                
+                if (targetComparison) {{
+                    targetComparison.scrollIntoView({{ behavior: 'smooth', block: 'center' }});
+                }}
+            }}
+            
+            // Keyboard navigation
+            document.addEventListener('keydown', function(e) {{
+                if (e.key === 'ArrowDown' || e.key === ' ') {{
+                    e.preventDefault();
+                    scrollToComparison('next');
+                }} else if (e.key === 'ArrowUp') {{
+                    e.preventDefault();
+                    scrollToComparison('prev');
+                }}
+            }});
+        </script>
+    </head>
+    <body>
+        <div class="navigation">
+            <button class="nav-button" onclick="scrollToComparison('prev')">↑ Previous</button>
+            <button class="nav-button" onclick="scrollToComparison('next')">↓ Next</button>
+            <div style="margin-top: 10px; font-size: 10px; color: #666;">
+                Use arrow keys or spacebar
+            </div>
+        </div>
+        
+        <div class="header">
+            <h1>PET Deface Comparisons - Animated</h1>
+            <p>Animated GIF comparison of original vs defaced neuroimaging data</p>
+        </div>
+        
+        <div class="comparisons-container">
+            {comparisons_html}
+        </div>
+    </body>
+    </html>
+    """
+
+    index_file = os.path.join(output_dir, "animated.html")
     with open(index_file, "w") as f:
         f.write(html_content)
 
@@ -487,6 +866,14 @@ def main():
         "--subject",
         type=str,
         help="Filter to specific subject (e.g., 'sub-01' or 'sub-01_ses-baseline')",
+    )
+
+    parser.add_argument(
+        "--size",
+        type=str,
+        choices=["compact", "full"],
+        default="compact",
+        help="Image size: 'compact' for closer together or 'full' for entire page width",
     )
     args = parser.parse_args()
 
@@ -525,8 +912,12 @@ def main():
     # Process subjects in parallel
     print("Generating comparisons...")
     with mp.Pool(processes=n_jobs) as pool:
-        # Create a partial function with the output_dir fixed
-        process_func = partial(process_subject, output_dir=output_dir)
+        # Create a partial function with the output_dir and size fixed
+        process_func = partial(
+            process_subject,
+            output_dir=output_dir,
+            size=args.size,
+        )
 
         # Process all subjects in parallel
         results = pool.map(process_func, subjects)
@@ -535,9 +926,79 @@ def main():
     successful = [r for r in results if r is not None]
     print(f"Successfully processed {len(successful)} out of {len(subjects)} subjects")
 
-    # Create index page
-    index_file = create_index_html(subjects, output_dir)
-    print(f"Created index: {index_file}")
+    # Create both HTML files
+    side_by_side_file = create_side_by_side_index_html(subjects, output_dir, args.size)
+    animated_file = create_gif_index_html(subjects, output_dir, args.size)
+
+    # Create a simple index that links to both
+    index_html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="utf-8">
+        <title>PET Deface Comparisons</title>
+        <style>
+            body {{
+                font-family: Arial, sans-serif;
+                margin: 50px;
+                background: #f5f5f5;
+                text-align: center;
+            }}
+            .container {{
+                max-width: 600px;
+                margin: 0 auto;
+                background: white;
+                padding: 40px;
+                border-radius: 15px;
+                box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            }}
+            h1 {{
+                color: #2c3e50;
+                margin-bottom: 30px;
+            }}
+            .link-button {{
+                display: inline-block;
+                margin: 15px;
+                padding: 15px 30px;
+                background: #3498db;
+                color: white;
+                text-decoration: none;
+                border-radius: 8px;
+                font-size: 16px;
+                transition: background 0.3s;
+            }}
+            .link-button:hover {{
+                background: #2980b9;
+            }}
+            .description {{
+                color: #666;
+                margin-bottom: 30px;
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1>PET Deface Comparisons</h1>
+            <p class="description">Choose your preferred viewing mode:</p>
+            
+            <a href="side_by_side.html" class="link-button">Side by Side View</a>
+            <a href="animated.html" class="link-button">Animated GIF View</a>
+            
+            <p style="margin-top: 30px; color: #999; font-size: 14px;">
+                Generated with {len(subjects)} subjects
+            </p>
+        </div>
+    </body>
+    </html>
+    """
+
+    index_file = os.path.join(output_dir, "index.html")
+    with open(index_file, "w") as f:
+        f.write(index_html)
+
+    print(f"Created side-by-side view: {side_by_side_file}")
+    print(f"Created animated view: {animated_file}")
+    print(f"Created main index: {index_file}")
 
     # Open browser if requested
     if args.open_browser:
