@@ -92,8 +92,12 @@ def create_overlay_gif(image_files, subject_id, output_dir):
     """Create an animated GIF switching between original and defaced."""
 
     # Load the PNG images
-    orig_png_path = os.path.join(output_dir, image_files[0][2])  # original image
-    defaced_png_path = os.path.join(output_dir, image_files[1][2])  # defaced image
+    orig_png_path = os.path.join(
+        output_dir, "images", image_files[0][2]
+    )  # original image
+    defaced_png_path = os.path.join(
+        output_dir, "images", image_files[1][2]
+    )  # defaced image
 
     # Open images
     orig_img = Image.open(orig_png_path)
@@ -114,7 +118,7 @@ def create_overlay_gif(image_files, subject_id, output_dir):
 
     # Save as GIF
     gif_filename = f"overlay_{subject_id}.gif"
-    gif_path = os.path.join(output_dir, gif_filename)
+    gif_path = os.path.join(output_dir, "images", gif_filename)
     frames[0].save(
         gif_path,
         save_all=True,
@@ -241,7 +245,7 @@ def create_comparison_html(
 
         # Save as PNG
         png_filename = f"{label}_{subject_id}.png"
-        png_path = os.path.join(output_dir, png_filename)
+        png_path = os.path.join(output_dir, "images", png_filename)
         fig.savefig(png_path, dpi=150)
         plt.close(fig)
 
@@ -526,8 +530,8 @@ def create_side_by_side_index_html(subjects, output_dir, size="compact"):
         defaced_basename = os.path.basename(subject["defaced_path"])
 
         # Check if the PNG files exist
-        orig_png = f"original_{subject_id}.png"
-        defaced_png = f"defaced_{subject_id}.png"
+        orig_png = f"images/original_{subject_id}.png"
+        defaced_png = f"images/defaced_{subject_id}.png"
 
         comparisons_html += f"""
         <div class="subject-comparison">
@@ -706,7 +710,7 @@ def create_gif_index_html(subjects, output_dir, size="compact"):
     comparisons_html = ""
     for subject in subjects:
         subject_id = subject["id"]
-        overlay_gif = f"overlay_{subject_id}.gif"
+        overlay_gif = f"images/overlay_{subject_id}.gif"
 
         comparisons_html += f"""
         <div class="subject-comparison">
@@ -866,8 +870,7 @@ def main():
     )
     parser.add_argument(
         "--output-dir",
-        default="petdeface_comparisons",
-        help="Output directory for HTML files",
+        help="Output directory for HTML files (default: {orig_folder}_{defaced_folder}_qa)",
     )
     parser.add_argument(
         "--open-browser", action="store_true", help="Open browser automatically"
@@ -895,10 +898,18 @@ def main():
 
     faced_dir = os.path.abspath(args.faced_dir)
     defaced_dir = os.path.abspath(args.defaced_dir)
-    output_dir = os.path.abspath(args.output_dir)
 
-    # Create output directory
+    # Create output directory name based on input directories
+    if args.output_dir:
+        output_dir = os.path.abspath(args.output_dir)
+    else:
+        orig_folder = os.path.basename(faced_dir)
+        defaced_folder = os.path.basename(defaced_dir)
+        output_dir = os.path.abspath(f"{orig_folder}_{defaced_folder}_qa")
+
+    # Create output directory and images subdirectory
     os.makedirs(output_dir, exist_ok=True)
+    os.makedirs(os.path.join(output_dir, "images"), exist_ok=True)
     print(f"Output directory: {output_dir}")
 
     # Build subjects list
@@ -1012,9 +1023,42 @@ def main():
     with open(index_file, "w") as f:
         f.write(index_html)
 
+    # Save the command with full expanded paths
+    import sys
+
+    command_parts = [
+        sys.executable,
+        os.path.abspath(__file__),
+        "--faced-dir",
+        faced_dir,
+        "--defaced-dir",
+        defaced_dir,
+        "--output-dir",
+        output_dir,
+        "--size",
+        args.size,
+    ]
+    if args.n_jobs:
+        command_parts.extend(["--n-jobs", str(args.n_jobs)])
+    if args.subject:
+        command_parts.extend(["--subject", args.subject])
+    if args.open_browser:
+        command_parts.append("--open-browser")
+
+    command_str = " ".join(command_parts)
+
+    command_file = os.path.join(output_dir, "command.txt")
+    with open(command_file, "w") as f:
+        f.write(f"# Command used to generate this comparison\n")
+        f.write(
+            f"# Generated on: {__import__('datetime').datetime.now().isoformat()}\n\n"
+        )
+        f.write(command_str + "\n")
+
     print(f"Created side-by-side view: {side_by_side_file}")
     print(f"Created animated view: {animated_file}")
     print(f"Created main index: {index_file}")
+    print(f"Saved command to: {command_file}")
 
     # Open browser if requested
     if args.open_browser:
