@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>NiiVue</title>
+  </head>
+  <body>
+    <div style="text-align: center; font-weight: bold; font-size: 2em; margin-bottom: 20px;">sub-01</div>
+    <div style="display: flex; gap: 20px; justify-content: center;">
+      <div style="display: flex; flex-direction: column; align-items: center;">
+        <div style="font-weight: bold; margin-bottom: 8px;">Original</div>
+        <canvas id="gl1" width="640" height="640"></canvas>
+      </div>
+      <div style="display: flex; flex-direction: column; align-items: center;">
+        <div style="font-weight: bold; margin-bottom: 8px;">Defaced</div>
+        <canvas id="gl2" width="640" height="640"></canvas>
+      </div>
+    </div>
+    <div style="margin-top: 20px; text-align: center;">
+      <label for="rotationSlider">Rotate: </label>
+      <input type="range" id="rotationSlider" min="0" max="36000" value="0" style="width: 300px;">
+      <span id="rotationValue">0</span>
+    </div>
+  </body>
+  <script type="module" async>
+    import { Niivue } from "https://unpkg.com/@niivue/niivue@0.57.0/dist/index.js"
+    var volumeList = [
+      { url: "../data/sub-01/ses-baseline/anat/sub-01_ses-baseline_T1w.nii" },
+    ];
+    // First viewer (Original)
+    var nv1 = new Niivue({ isResizeCanvas: false });
+    await nv1.attachTo("gl1");
+    nv1.setSliceType(nv1.sliceTypeRender);
+    await nv1.loadVolumes(volumeList);
+    // Second viewer (Defaced)
+    var nv2 = new Niivue({ isResizeCanvas: false });
+    await nv2.attachTo("gl2");
+    nv2.setSliceType(nv2.sliceTypeRender);
+    await nv2.loadVolumes(volumeList);
+    // Synchronized rotation control
+    const rotationSlider = document.getElementById('rotationSlider');
+    const rotationValue = document.getElementById('rotationValue');
+    rotationSlider.addEventListener('input', () => {
+      const deg = parseFloat(rotationSlider.value);
+      rotationValue.textContent = deg;
+      // Convert degrees to radians
+      const rad = deg * Math.PI / 180;
+      // Set azimuth (horizontal rotation) for both viewers
+      nv1.scene.renderAzimuth = rad;
+      nv2.scene.renderAzimuth = rad;
+      nv1.drawScene();
+      nv2.drawScene();
+    });
+  </script>
+</html>
