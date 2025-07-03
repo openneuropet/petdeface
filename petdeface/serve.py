@@ -208,32 +208,68 @@ def create_comparison_html(orig_path, defaced_path, subject_id, output_dir):
     <head>
         <meta charset="utf-8">
         <title>PET Deface Comparison - {subject_id}</title>
+        <style>
+            body {{
+                font-family: Arial, sans-serif;
+                margin: 20px;
+                background: #f5f5f5;
+            }}
+            .header {{
+                text-align: center;
+                margin-bottom: 30px;
+                color: #333;
+            }}
+            .comparison {{
+                display: flex;
+                justify-content: center;
+                gap: 20px;
+                margin-bottom: 20px;
+            }}
+            .viewer {{
+                background: white;
+                padding: 20px;
+                border-radius: 10px;
+                box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+                text-align: center;
+                flex: 1;
+                max-width: 50%;
+            }}
+            .viewer h3 {{
+                margin-top: 0;
+                color: #2c3e50;
+            }}
+            .viewer img {{
+                width: 100%;
+                height: auto;
+                border-radius: 8px;
+                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            }}
+        </style>
     </head>
     <body>
-        <h1>PET Deface Comparison - {subject_id}</h1>
-        <p>Side-by-side comparison of original vs defaced neuroimaging data</p>
+        <div class="header">
+            <h1>PET Deface Comparison - {subject_id}</h1>
+            <p>Side-by-side comparison of original vs defaced neuroimaging data</p>
+        </div>
         
-        <table>
+        <div class="comparison">
     """
 
     # Add images side by side
     html_content += f"""
-            <tr>
-                <td>
-                    <h3>{image_files[0][0].title()}: {image_files[0][1]}</h3>
-                    <img src="{image_files[0][2]}" alt="{image_files[0][0].title()}: {image_files[0][1]}">
-                </td>
-                <td>
-                    <h3>{image_files[1][0].title()}: {image_files[1][1]}</h3>
-                    <img src="{image_files[1][2]}" alt="{image_files[1][0].title()}: {image_files[1][1]}">
-                </td>
-            </tr>
-        """
-
-    html_content += """
-        </table>
+            <div class="viewer">
+                <h3>{image_files[0][0].title()}: {image_files[0][1]}</h3>
+                <img src="{image_files[0][2]}" alt="{image_files[0][0].title()}: {image_files[0][1]}">
+            </div>
+            <div class="viewer">
+                <h3>{image_files[1][0].title()}: {image_files[1][1]}</h3>
+                <img src="{image_files[1][2]}" alt="{image_files[1][0].title()}: {image_files[1][1]}">
+            </div>
+        </div>
         
-        <p><a href="index.html">← Back to Index</a></p>
+        <div style="text-align: center; margin-top: 30px;">
+            <a href="index.html">← Back to Index</a>
+        </div>
     </body>
     </html>
     """
@@ -335,20 +371,19 @@ def create_index_html(subjects, output_dir):
         defaced_png = f"defaced_{subject_id}.png"
 
         comparisons_html += f"""
-        <h2>{subject_id}</h2>
-        <table>
-            <tr>
-                <td>
+        <div class="subject-comparison">
+            <h2>{subject_id}</h2>
+            <div class="comparison-grid">
+                <div class="viewer">
                     <h3>Original: {orig_basename}</h3>
                     <img src="{orig_png}" alt="Original: {orig_basename}">
-                </td>
-                <td>
+                </div>
+                <div class="viewer">
                     <h3>Defaced: {defaced_basename}</h3>
                     <img src="{defaced_png}" alt="Defaced: {defaced_basename}">
-                </td>
-            </tr>
-        </table>
-        <hr>
+                </div>
+            </div>
+        </div>
         """
 
     html_content = f"""
@@ -357,12 +392,62 @@ def create_index_html(subjects, output_dir):
     <head>
         <meta charset="utf-8">
         <title>PET Deface Comparisons</title>
+        <style>
+            body {{
+                font-family: Arial, sans-serif;
+                margin: 20px;
+                background: #f5f5f5;
+            }}
+            .header {{
+                text-align: center;
+                margin-bottom: 30px;
+                color: #333;
+            }}
+            .subject-comparison {{
+                background: white;
+                margin-bottom: 40px;
+                padding: 30px;
+                border-radius: 15px;
+                box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            }}
+            .subject-comparison h2 {{
+                color: #2c3e50;
+                margin-top: 0;
+                margin-bottom: 20px;
+                text-align: center;
+                font-size: 1.5em;
+            }}
+            .comparison-grid {{
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 30px;
+                align-items: start;
+            }}
+            .viewer {{
+                text-align: center;
+            }}
+            .viewer h3 {{
+                color: #34495e;
+                margin-bottom: 15px;
+                font-size: 1.1em;
+            }}
+            .viewer img {{
+                width: 100%;
+                height: auto;
+                border-radius: 8px;
+                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            }}
+        </style>
     </head>
     <body>
-        <h1>PET Deface Comparisons</h1>
-        <p>Side-by-side comparison of original vs defaced neuroimaging data for all subjects</p>
+        <div class="header">
+            <h1>PET Deface Comparisons</h1>
+            <p>Side-by-side comparison of original vs defaced neuroimaging data for all subjects</p>
+        </div>
         
-        {comparisons_html}
+        <div class="comparisons-container">
+            {comparisons_html}
+        </div>
     </body>
     </html>
     """
