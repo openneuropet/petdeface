@@ -16,6 +16,218 @@ import multiprocessing as mp
 from functools import partial
 import seaborn as sns
 from PIL import Image, ImageDraw
+from nipype import Workflow, Node
+from nireports.interfaces.reporting.base import SimpleBeforeAfterRPT
+from tempfile import TemporaryDirectory
+from pathlib import Path
+
+
+def generate_simple_before_and_after(subjects: dict, output_dir):
+    if not output_dir:
+        output_dir = TemporaryDirectory()
+    wf = Workflow(
+        name="simple_before_after_report", base_dir=Path(output_dir) / "images/"
+    )
+
+    # Create a list to store all nodes
+    nodes = []
+
+    for s in subjects:
+        # only run this on the T1w images for now
+        if "T1w" in s["orig_path"]:
+            o_path = Path(s["orig_path"])
+            # Create a valid node name by replacing invalid characters
+            valid_name = f"before_after_{s['id'].replace('-', '_').replace('_', '')}"
+            node = Node(
+                SimpleBeforeAfterRPT(
+                    before=s["orig_path"],
+                    after=s["defaced_path"],
+                    before_label="Original",
+                    after_label="Defaced",
+                    out_report=f"{s['id']}_simple_before_after.svg",
+                ),
+                name=valid_name,
+            )
+            nodes.append(node)
+
+            # Add all nodes to the workflow
+    wf.add_nodes(nodes)
+    wf.run(plugin="MultiProc", plugin_args={"n_procs": mp.cpu_count()})
+
+    # Collect SVG files and move them to images folder
+    collect_svg_reports(wf, output_dir)
+
+
+def collect_svg_reports(wf, output_dir):
+    """Collect SVG reports from workflow and move them to images folder."""
+    import glob
+
+    # Find all SVG files in the workflow directory
+    workflow_dir = wf.base_dir
+    svg_files = glob.glob(os.path.join(workflow_dir, "**", "*.svg"), recursive=True)
+
+    print(f"Found {len(svg_files)} SVG reports")
+
+    # Move each SVG to the images folder
+    for svg_file in svg_files:
+        filename = os.path.basename(svg_file)
+        dest_path = os.path.join(output_dir, "images", filename)
+        shutil.move(svg_file, dest_path)
+        print(f"  Moved: {filename}")
+
+    # Create HTML page for SVG reports
+    create_svg_index_html(svg_files, output_dir)
+
+
+def create_svg_index_html(svg_files, output_dir):
+    """Create HTML index page for SVG reports."""
+
+    svg_entries = ""
+    for svg_file in svg_files:
+        filename = os.path.basename(svg_file)
+        subject_id = filename.replace("_simple_before_after.svg", "")
+
+        svg_entries += f"""
+        <div class="svg-report">
+            <h3>{subject_id}</h3>
+            <object data="images/{filename}" type="image/svg+xml" style="width: 100%; height: 600px;">
+                <p>Your browser does not support SVG. <a href="images/{filename}">Download SVG</a></p>
+            </object>
+        </div>
+        """
+
+    html_content = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="utf-8">
+        <title>PET Deface SVG Reports</title>
+        <style>
+            body {{
+                font-family: Arial, sans-serif;
+                margin: 20px;
+                background: #f5f5f5;
+            }}
+            .header {{
+                text-align: center;
+                margin-bottom: 30px;
+                color: #333;
+            }}
+            .svg-report {{
+                background: white;
+                margin-bottom: 40px;
+                padding: 20px;
+                border-radius: 10px;
+                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            }}
+            .svg-report h3 {{
+                color: #2c3e50;
+                margin-top: 0;
+                margin-bottom: 15px;
+                text-align: center;
+            }}
+            .navigation {{
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                background: white;
+                padding: 15px;
+                border-radius: 10px;
+                box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+                z-index: 1000;
+            }}
+            .nav-button {{
+                display: block;
+                margin: 5px 0;
+                padding: 8px 12px;
+                background: #3498db;
+                color: white;
+                border: none;
+                border-radius: 5px;
+                cursor: pointer;
+                font-size: 12px;
+                text-decoration: none;
+            }}
+            .nav-button:hover {{
+                background: #2980b9;
+            }}
+        </style>
+        <script>
+            function scrollToReport(direction) {{
+                const reports = document.querySelectorAll('.svg-report');
+                const currentScroll = window.pageYOffset;
+                const windowHeight = window.innerHeight;
+                let targetReport = null;
+                
+                if (direction === 'next') {{
+                    for (let report of reports) {{
+                        if (report.offsetTop > currentScroll + windowHeight * 0.3) {{
+                            targetReport = report;
+                            break;
+                        }}
+                    }}
+                    if (!targetReport && reports.length > 0) {{
+                        targetReport = reports[0];
+                    }}
+                }} else if (direction === 'prev') {{
+                    for (let i = reports.length - 1; i >= 0; i--) {{
+                        if (reports[i].offsetTop < currentScroll - windowHeight * 0.3) {{
+                            targetReport = reports[i];
+                            break;
+                        }}
+                    }}
+                    if (!targetReport && reports.length > 0) {{
+                        targetReport = reports[reports.length - 1];
+                    }}
+                }}
+                
+                if (targetReport) {{
+                    targetReport.scrollIntoView({{ behavior: 'smooth', block: 'center' }});
+                }}
+            }}
+            
+            // Keyboard navigation
+            document.addEventListener('keydown', function(e) {{
+                if (e.key === 'ArrowDown' || e.key === ' ') {{
+                    e.preventDefault();
+                    scrollToReport('next');
+                }} else if (e.key === 'ArrowUp') {{
+                    e.preventDefault();
+                    scrollToReport('prev');
+                }}
+            }});
+        </script>
+    </head>
+    <body>
+        <div class="navigation">
+            <button class="nav-button" onclick="scrollToReport('prev')">↑ Previous</button>
+            <button class="nav-button" onclick="scrollToReport('next')">↓ Next</button>
+            <div style="margin-top: 10px; font-size: 10px; color: #666;">
+                Use arrow keys or spacebar
+            </div>
+        </div>
+        
+        <div class="header">
+            <h1>PET Deface SVG Reports</h1>
+            <p>Before/After comparison reports using nireports</p>
+        </div>
+        
+        <div class="reports-container">
+            {svg_entries}
+        </div>
+        
+        <div style="text-align: center; margin-top: 30px;">
+            <a href="index.html">← Back to Index</a>
+        </div>
+    </body>
+    </html>
+    """
+
+    svg_index_file = os.path.join(output_dir, "SimpleBeforeAfterRPT.html")
+    with open(svg_index_file, "w") as f:
+        f.write(html_content)
+
+    print(f"Created SVG reports index: {svg_index_file}")
 
 
 def create_overlay_comparison(orig_path, defaced_path, subject_id, output_dir):
@@ -932,6 +1144,9 @@ def main():
                 print(f"  - {s['id']}")
             exit(1)
 
+    # create nireports svg's for comparison
+    generate_simple_before_and_after(subjects=subjects, output_dir=output_dir)
+
     # Set number of jobs for parallel processing
     n_jobs = args.n_jobs if args.n_jobs else mp.cpu_count()
     print(f"Using {n_jobs} parallel processes")
@@ -1010,6 +1225,7 @@ def main():
             
             <a href="side_by_side.html" class="link-button">Side by Side View</a>
             <a href="animated.html" class="link-button">Animated GIF View</a>
+            <a href="SimpleBeforeAfterRPT.html" class="link-button">SVG Reports View</a>
             
             <p style="margin-top: 30px; color: #999; font-size: 14px;">
                 Generated with {len(subjects)} subjects
