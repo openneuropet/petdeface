@@ -386,6 +386,8 @@ def create_comparison_html(
         # Load and preprocess image (handle 4D if needed)
         img = load_and_preprocess_image(img_path)
 
+        # save image to temp folder for later loading
+
         # Create single sagittal slice using matplotlib directly
         img_data = img.get_fdata()
         x_midpoint = img_data.shape[0] // 2  # Get middle slice index
@@ -657,14 +659,25 @@ def process_subject(subject, output_dir, size="compact"):
     """Process a single subject (for parallel processing)."""
     print(f"Processing {subject['id']}...")
     try:
+        subject_temp_dir = tempfile.TemporaryDirectory()
+        # load each image file then save it to temp
+        original_image = load_and_preprocess_image(subject["orig_path"])
+        defaced_image = load_and_preprocess_image(subject["defaced_path"])
+        original_image = nib.Nifti1Image(original_image.get_fdata(), original_image.affine, original_image.header)
+        defaced_image = nib.Nifti1Image(defaced_image.get_fdata(), defaced_image.affine, defaced_image.header)
+        
+        nib.save(original_image, Path(subject_temp_dir.name) / Path(subject["orig_path"]).name)
+        nib.save(defaced_image, Path(subject_temp_dir.name) / Path(subject["defaced_path"]).name)
+
         comparison_file = create_comparison_html(
-            subject["orig_path"],
-            subject["defaced_path"],
+            Path(subject_temp_dir.name) / Path(subject["orig_path"]).name,
+            Path(subject_temp_dir.name) / Path(subject["defaced_path"]).name,
             subject["id"],
             output_dir,
             "side-by-side",  # Always generate side-by-side for individual pages
             size,
         )
+
         print(f"  Completed: {subject['id']}")
         return comparison_file
     except Exception as e:
