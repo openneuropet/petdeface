@@ -1057,6 +1057,18 @@ def cli():
         required=False,
         default=[],
     )
+    parser.add_argument(
+        "--qa",
+        action="store_true",
+        default=False,
+        help="Generate QA reports after defacing is complete",
+    )
+    parser.add_argument(
+        "--open-browser",
+        action="store_true",
+        default=False,
+        help="Open browser automatically after QA report generation (requires --qa)",
+    )
 
     arguments = parser.parse_args()
     return arguments
@@ -1256,6 +1268,65 @@ def main():  # noqa: max-complexity: 12
             session_label_exclude=args.session_label_exclude,
         )
         petdeface.run()
+
+        # Generate QA reports if requested
+        if args.qa:
+            print("\n" + "=" * 60)
+            print("Generating QA reports...")
+            print("=" * 60)
+
+            try:
+                # Import qa module
+                import qa
+                import sys
+
+                # Determine the defaced directory based on placement
+                if args.placement == "adjacent":
+                    defaced_dir = args.bids_dir.parent / f"{args.bids_dir.name}_defaced"
+                elif args.placement == "inplace":
+                    defaced_dir = args.bids_dir
+                elif args.placement == "derivatives":
+                    defaced_dir = args.bids_dir / "derivatives" / "petdeface"
+                else:
+                    defaced_dir = (
+                        args.output_dir
+                        if args.output_dir
+                        else args.bids_dir / "derivatives" / "petdeface"
+                    )
+
+                # Build QA arguments as sys.argv style
+                qa_argv = [
+                    "qa.py",  # Script name
+                    "--faced-dir",
+                    str(args.bids_dir),
+                    "--defaced-dir",
+                    str(defaced_dir),
+                ]
+
+                if args.open_browser:
+                    qa_argv.append("--open-browser")
+
+                if args.participant_label:
+                    qa_argv.extend(["--subject", " ".join(args.participant_label)])
+
+                # Temporarily replace sys.argv and run QA
+                original_argv = sys.argv
+                sys.argv = qa_argv
+
+                try:
+                    qa.main()
+                finally:
+                    sys.argv = original_argv
+
+                print("\n" + "=" * 60)
+                print("QA reports generated successfully!")
+                print("=" * 60)
+
+            except Exception as e:
+                print(f"\nError generating QA reports: {e}")
+                print(
+                    "QA report generation failed, but defacing completed successfully."
+                )
 
 
 if __name__ == "__main__":

@@ -26,11 +26,24 @@ def preprocess_single_subject(s, output_dir):
     """Preprocess a single subject's images (for parallel processing)."""
     temp_dir = os.path.join(output_dir, "temp_3d_images")
 
+    # Extract BIDS suffix from original path to preserve meaningful naming
+    orig_basename = os.path.basename(s["orig_path"])
+    defaced_basename = os.path.basename(s["defaced_path"])
+
+    # Extract the meaningful part (e.g., "sub-01_ses-baseline_T1w" or "sub-01_ses-baseline_pet")
+    def extract_bids_name(basename):
+        # Remove .nii.gz extension
+        name = basename.replace(".nii.gz", "").replace(".nii", "")
+        return name
+
+    orig_bids_name = extract_bids_name(orig_basename)
+    defaced_bids_name = extract_bids_name(defaced_basename)
+
     # Preprocess original image
     orig_result = load_and_preprocess_image(s["orig_path"])
     if isinstance(orig_result, nib.Nifti1Image):
-        # Need to save the averaged image
-        orig_3d_path = os.path.join(temp_dir, f"orig_{s['id']}.nii.gz")
+        # Need to save the averaged image with meaningful name
+        orig_3d_path = os.path.join(temp_dir, f"orig_{orig_bids_name}.nii.gz")
         nib.save(orig_result, orig_3d_path)
         orig_img = orig_result
     else:
@@ -41,8 +54,8 @@ def preprocess_single_subject(s, output_dir):
     # Preprocess defaced image
     defaced_result = load_and_preprocess_image(s["defaced_path"])
     if isinstance(defaced_result, nib.Nifti1Image):
-        # Need to save the averaged image
-        defaced_3d_path = os.path.join(temp_dir, f"defaced_{s['id']}.nii.gz")
+        # Need to save the averaged image with meaningful name
+        defaced_3d_path = os.path.join(temp_dir, f"defaced_{defaced_bids_name}.nii.gz")
         nib.save(defaced_result, defaced_3d_path)
         defaced_img = defaced_result
     else:
@@ -451,12 +464,19 @@ def create_comparison_html(
     output_dir,
     display_mode="side-by-side",
     size="compact",
+    orig_path=None,
+    defaced_path=None,
 ):
     """Create HTML comparison page for a subject using nilearn ortho views."""
 
-    # Get basenames for display
-    orig_basename = f"orig_{subject_id}.nii.gz"
-    defaced_basename = f"defaced_{subject_id}.nii.gz"
+    # Get basenames for display - use actual filenames with BIDS suffixes if available
+    if orig_path and defaced_path:
+        orig_basename = os.path.basename(orig_path)
+        defaced_basename = os.path.basename(defaced_path)
+    else:
+        # Fallback to generic names if paths not provided
+        orig_basename = f"orig_{subject_id}.nii.gz"
+        defaced_basename = f"defaced_{subject_id}.nii.gz"
 
     # Generate images and get their filenames
     image_files = []
@@ -744,6 +764,8 @@ def process_subject(subject, output_dir, size="compact"):
             output_dir,
             "side-by-side",  # Always generate side-by-side for individual pages
             size,
+            subject["orig_path"],
+            subject["defaced_path"],
         )
         print(f"  Completed: {subject['id']}")
         return comparison_file
@@ -832,8 +854,10 @@ def create_side_by_side_index_html(subjects, output_dir, size="compact"):
     comparisons_html = ""
     for subject in subjects:
         subject_id = subject["id"]
-        orig_basename = f"orig_{subject_id}.nii.gz"
-        defaced_basename = f"defaced_{subject_id}.nii.gz"
+
+        # Use actual filenames with BIDS suffixes instead of generic names
+        orig_basename = os.path.basename(subject["orig_path"])
+        defaced_basename = os.path.basename(subject["defaced_path"])
 
         # Check if the PNG files exist
         orig_png = f"images/original_{subject_id}.png"
