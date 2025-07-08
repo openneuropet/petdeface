@@ -22,7 +22,73 @@ from tempfile import TemporaryDirectory
 from pathlib import Path
 
 
-def generate_simple_before_and_after(subjects: dict, output_dir):
+def preprocess_single_subject(s, output_dir):
+    """Preprocess a single subject's images (for parallel processing)."""
+    temp_dir = os.path.join(output_dir, "temp_3d_images")
+
+    # Preprocess original image
+    orig_result = load_and_preprocess_image(s["orig_path"])
+    if isinstance(orig_result, nib.Nifti1Image):
+        # Need to save the averaged image
+        orig_3d_path = os.path.join(temp_dir, f"orig_{s['id']}.nii.gz")
+        nib.save(orig_result, orig_3d_path)
+        orig_img = orig_result
+    else:
+        # Already 3D, use original path and load image
+        orig_3d_path = orig_result
+        orig_img = nib.load(orig_result)
+
+    # Preprocess defaced image
+    defaced_result = load_and_preprocess_image(s["defaced_path"])
+    if isinstance(defaced_result, nib.Nifti1Image):
+        # Need to save the averaged image
+        defaced_3d_path = os.path.join(temp_dir, f"defaced_{s['id']}.nii.gz")
+        nib.save(defaced_result, defaced_3d_path)
+        defaced_img = defaced_result
+    else:
+        # Already 3D, use original path and load image
+        defaced_3d_path = defaced_result
+        defaced_img = nib.load(defaced_result)
+
+    # Create new subject dict with preprocessed paths (update paths to 3D versions)
+    preprocessed_subject = {
+        "id": s["id"],
+        "orig_path": orig_3d_path,  # Update to 3D path
+        "defaced_path": defaced_3d_path,  # Update to 3D path
+        "orig_img": orig_img,  # Keep loaded image for direct use
+        "defaced_img": defaced_img,  # Keep loaded image for direct use
+    }
+
+    print(f"  Preprocessed {s['id']}")
+    return preprocessed_subject
+
+
+def preprocess_images(subjects: dict, output_dir, n_jobs=None):
+    """Preprocess all images once: load and convert 4D to 3D if needed."""
+    print("Preprocessing images (4D→3D conversion)...")
+
+    # Create temp directory
+    temp_dir = os.path.join(output_dir, "temp_3d_images")
+    os.makedirs(temp_dir, exist_ok=True)
+
+    # Set number of jobs for parallel processing
+    if n_jobs is None:
+        n_jobs = mp.cpu_count()
+    print(f"Using {n_jobs} parallel processes for preprocessing")
+
+    # Process subjects in parallel
+    with mp.Pool(processes=n_jobs) as pool:
+        # Create a partial function with the output_dir fixed
+        preprocess_func = partial(preprocess_single_subject, output_dir=output_dir)
+
+        # Process all subjects in parallel
+        preprocessed_subjects = pool.map(preprocess_func, subjects)
+
+    print(f"Preprocessed {len(preprocessed_subjects)} subjects")
+    return preprocessed_subjects
+
+
+def generate_simple_before_and_after(preprocessed_subjects: dict, output_dir):
     if not output_dir:
         output_dir = TemporaryDirectory()
     wf = Workflow(
@@ -32,12 +98,24 @@ def generate_simple_before_and_after(subjects: dict, output_dir):
     # Create a list to store all nodes
     nodes = []
 
-    for s in subjects:
+    for s in preprocessed_subjects:
         # only run this on the T1w images for now
         if "T1w" in s["orig_path"]:
             o_path = Path(s["orig_path"])
-            # Create a valid node name by replacing invalid characters
-            valid_name = f"before_after_{s['id'].replace('-', '_').replace('_', '')}"
+            # Create a valid node name by replacing invalid characters but preserving session info
+            # Use the full path to ensure uniqueness
+            path_parts = s["orig_path"].split(os.sep)
+            subject_part = next(
+                (p for p in path_parts if p.startswith("sub-")), s["id"]
+            )
+            session_part = next((p for p in path_parts if p.startswith("ses-")), "")
+
+            if session_part:
+                valid_name = f"before_after_{subject_part}_{session_part}".replace(
+                    "-", "_"
+                )
+            else:
+                valid_name = f"before_after_{subject_part}".replace("-", "_")
             node = Node(
                 SimpleBeforeAfterRPT(
                     before=s["orig_path"],
@@ -52,10 +130,14 @@ def generate_simple_before_and_after(subjects: dict, output_dir):
 
             # Add all nodes to the workflow
     wf.add_nodes(nodes)
-    wf.run(plugin="MultiProc", plugin_args={"n_procs": mp.cpu_count()})
 
-    # Collect SVG files and move them to images folder
-    collect_svg_reports(wf, output_dir)
+    # Only run if we have nodes to process
+    if nodes:
+        wf.run(plugin="MultiProc", plugin_args={"n_procs": mp.cpu_count()})
+        # Collect SVG files and move them to images folder
+        collect_svg_reports(wf, output_dir)
+    else:
+        print("No T1w images found for SVG report generation")
 
 
 def collect_svg_reports(wf, output_dir):
@@ -343,7 +425,8 @@ def create_overlay_gif(image_files, subject_id, output_dir):
 
 
 def load_and_preprocess_image(img_path):
-    """Load image and take mean if it has more than 3 dimensions."""
+    """Load image and take mean if it has more than 3 dimensions.
+    Returns nibabel image if averaging was needed, otherwise returns original path."""
     img = nib.load(img_path)
 
     # Check if image has more than 3 dimensions
@@ -356,13 +439,14 @@ def load_and_preprocess_image(img_path):
         mean_data = np.mean(data, axis=3)
         # Create new 3D image
         img = nib.Nifti1Image(mean_data, img.affine, img.header)
-
-    return img
+        return img  # Return nibabel image object
+    else:
+        return img_path  # Return original path if already 3D
 
 
 def create_comparison_html(
-    orig_path,
-    defaced_path,
+    orig_img,
+    defaced_img,
     subject_id,
     output_dir,
     display_mode="side-by-side",
@@ -371,21 +455,15 @@ def create_comparison_html(
     """Create HTML comparison page for a subject using nilearn ortho views."""
 
     # Get basenames for display
-    orig_basename = os.path.basename(orig_path)
-    defaced_basename = os.path.basename(defaced_path)
+    orig_basename = f"orig_{subject_id}.nii.gz"
+    defaced_basename = f"defaced_{subject_id}.nii.gz"
 
     # Generate images and get their filenames
     image_files = []
-    for label, img_path, cmap in [
-        ("original", orig_path, "hot"),  # Colored for original
-        ("defaced", defaced_path, "gray"),  # Grey for defaced
+    for label, img, basename, cmap in [
+        ("original", orig_img, orig_basename, "hot"),  # Colored for original
+        ("defaced", defaced_img, defaced_basename, "gray"),  # Grey for defaced
     ]:
-        # Get the basename for display
-        basename = os.path.basename(img_path)
-
-        # Load and preprocess image (handle 4D if needed)
-        img = load_and_preprocess_image(img_path)
-
         # save image to temp folder for later loading
 
         # Create single sagittal slice using matplotlib directly
@@ -659,25 +737,14 @@ def process_subject(subject, output_dir, size="compact"):
     """Process a single subject (for parallel processing)."""
     print(f"Processing {subject['id']}...")
     try:
-        subject_temp_dir = tempfile.TemporaryDirectory()
-        # load each image file then save it to temp
-        original_image = load_and_preprocess_image(subject["orig_path"])
-        defaced_image = load_and_preprocess_image(subject["defaced_path"])
-        original_image = nib.Nifti1Image(original_image.get_fdata(), original_image.affine, original_image.header)
-        defaced_image = nib.Nifti1Image(defaced_image.get_fdata(), defaced_image.affine, defaced_image.header)
-        
-        nib.save(original_image, Path(subject_temp_dir.name) / Path(subject["orig_path"]).name)
-        nib.save(defaced_image, Path(subject_temp_dir.name) / Path(subject["defaced_path"]).name)
-
         comparison_file = create_comparison_html(
-            Path(subject_temp_dir.name) / Path(subject["orig_path"]).name,
-            Path(subject_temp_dir.name) / Path(subject["defaced_path"]).name,
+            subject["orig_img"],
+            subject["defaced_img"],
             subject["id"],
             output_dir,
             "side-by-side",  # Always generate side-by-side for individual pages
             size,
         )
-
         print(f"  Completed: {subject['id']}")
         return comparison_file
     except Exception as e:
@@ -687,8 +754,22 @@ def process_subject(subject, output_dir, size="compact"):
 
 def build_subjects_from_datasets(orig_dir, defaced_dir):
     """Build subject list with file paths."""
-    orig_files = glob(os.path.join(orig_dir, "**", "*.nii*"), recursive=True)
-    defaced_files = glob(os.path.join(defaced_dir, "**", "*.nii*"), recursive=True)
+
+    # Get all NIfTI files but exclude derivatives and workflow folders
+    def get_nifti_files(directory):
+        all_files = glob(os.path.join(directory, "**", "*.nii*"), recursive=True)
+        # Filter out files in derivatives, workflow, or other processing folders
+        filtered_files = []
+        for file_path in all_files:
+            # Skip files in derivatives, workflow, or processing-related directories
+            path_parts = file_path.split(os.sep)
+            skip_dirs = ["derivatives", "work", "wf", "tmp", "temp", "scratch", "cache"]
+            if not any(skip_dir in path_parts for skip_dir in skip_dirs):
+                filtered_files.append(file_path)
+        return filtered_files
+
+    orig_files = get_nifti_files(orig_dir)
+    defaced_files = get_nifti_files(defaced_dir)
 
     def strip_ext(path):
         base = os.path.basename(path)
@@ -751,8 +832,8 @@ def create_side_by_side_index_html(subjects, output_dir, size="compact"):
     comparisons_html = ""
     for subject in subjects:
         subject_id = subject["id"]
-        orig_basename = os.path.basename(subject["orig_path"])
-        defaced_basename = os.path.basename(subject["defaced_path"])
+        orig_basename = f"orig_{subject_id}.nii.gz"
+        defaced_basename = f"defaced_{subject_id}.nii.gz"
 
         # Check if the PNG files exist
         orig_png = f"images/original_{subject_id}.png"
@@ -1157,12 +1238,17 @@ def main():
                 print(f"  - {s['id']}")
             exit(1)
 
-    # create nireports svg's for comparison
-    generate_simple_before_and_after(subjects=subjects, output_dir=output_dir)
-
     # Set number of jobs for parallel processing
     n_jobs = args.n_jobs if args.n_jobs else mp.cpu_count()
     print(f"Using {n_jobs} parallel processes")
+
+    # Preprocess all images once (4D→3D conversion)
+    preprocessed_subjects = preprocess_images(subjects, output_dir, n_jobs)
+
+    # create nireports svg's for comparison
+    generate_simple_before_and_after(
+        preprocessed_subjects=preprocessed_subjects, output_dir=output_dir
+    )
 
     # Process subjects in parallel
     print("Generating comparisons...")
@@ -1175,15 +1261,19 @@ def main():
         )
 
         # Process all subjects in parallel
-        results = pool.map(process_func, subjects)
+        results = pool.map(process_func, preprocessed_subjects)
 
     # Count successful results
     successful = [r for r in results if r is not None]
-    print(f"Successfully processed {len(successful)} out of {len(subjects)} subjects")
+    print(
+        f"Successfully processed {len(successful)} out of {len(preprocessed_subjects)} subjects"
+    )
 
     # Create both HTML files
-    side_by_side_file = create_side_by_side_index_html(subjects, output_dir, args.size)
-    animated_file = create_gif_index_html(subjects, output_dir, args.size)
+    side_by_side_file = create_side_by_side_index_html(
+        preprocessed_subjects, output_dir, args.size
+    )
+    animated_file = create_gif_index_html(preprocessed_subjects, output_dir, args.size)
 
     # Create a simple index that links to both
     index_html = f"""
@@ -1241,7 +1331,7 @@ def main():
             <a href="SimpleBeforeAfterRPT.html" class="link-button">SVG Reports View</a>
             
             <p style="margin-top: 30px; color: #999; font-size: 14px;">
-                Generated with {len(subjects)} subjects
+                Generated with {len(preprocessed_subjects)} subjects
             </p>
         </div>
     </body>
