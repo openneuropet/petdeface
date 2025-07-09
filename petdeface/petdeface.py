@@ -1277,7 +1277,7 @@ def main():  # noqa: max-complexity: 12
 
             try:
                 # Import qa module
-                import qa
+                from petdeface import qa
                 import sys
 
                 # Determine the defaced directory based on placement
