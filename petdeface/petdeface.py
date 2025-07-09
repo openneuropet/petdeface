@@ -32,11 +32,13 @@ try:
     from mideface import Mideface
     from pet import WeightedAverage
     from utils import run_validator
+    from qa import run_qa
 except ModuleNotFoundError:
     from .mideface import ApplyMideface
     from .mideface import Mideface
     from .pet import WeightedAverage
     from .utils import run_validator
+    from .qa import run_qa
 
 
 # collect version from pyproject.toml
@@ -297,7 +299,7 @@ def deface(args: Union[dict, argparse.Namespace]) -> None:
     write_out_dataset_description_json(args.bids_dir)
 
     # remove temp outputs - this is commented out to enable easier testing for now
-    if str(os.getenv("DEBUG", "false")).lower() != "true":
+    if str(os.getenv("PETDEFACE_DEBUG", "false")).lower() != "true":
         shutil.rmtree(os.path.join(output_dir, "petdeface_wf"))
 
     return {"subjects": subjects}
@@ -671,21 +673,21 @@ def wrap_up_defacing(
             should_exclude = False
             for excluded_subject in participant_label_exclude:
                 # Handle both cases: excluded_subject with or without 'sub-' prefix
-                if excluded_subject.startswith('sub-'):
+                if excluded_subject.startswith("sub-"):
                     subject_pattern = f"/{excluded_subject}/"
                     subject_pattern_underscore = f"/{excluded_subject}_"
                 else:
                     subject_pattern = f"/sub-{excluded_subject}/"
                     subject_pattern_underscore = f"/sub-{excluded_subject}_"
-                
+
                 if subject_pattern in entry or subject_pattern_underscore in entry:
                     should_exclude = True
                     break
-            
+
             # Skip excluded subject files, but copy everything else (including dataset-level files)
             if should_exclude:
                 continue
-                
+
             copy_path = entry.replace(str(path_to_dataset), str(final_destination))
             pathlib.Path(copy_path).parent.mkdir(
                 parents=True, exist_ok=True, mode=0o775
@@ -730,7 +732,7 @@ def wrap_up_defacing(
             desc="defaced",
             return_type="file",
         )
-        if str(os.getenv("DEBUG", "false")).lower() != "true":
+        if str(os.getenv("PETDEFAC_DEBUG", "false")).lower() != "true":
             for extraneous in derivatives:
                 os.remove(extraneous)
 
@@ -741,15 +743,16 @@ def wrap_up_defacing(
             "placement must be one of ['adjacent', 'inplace', 'derivatives']"
         )
 
-    # clean up any errantly leftover files with globe in destination folder
-    leftover_files = [
-        pathlib.Path(defaced_nii)
-        for defaced_nii in glob.glob(
-            f"{final_destination}/**/*_defaced*.nii*", recursive=True
-        )
-    ]
-    for leftover in leftover_files:
-        leftover.unlink()
+    if not os.getenv("PETDEFACE_DEBUG"):
+        # clean up any errantly leftover files with glob in destination folder
+        leftover_files = [
+            pathlib.Path(defaced_nii)
+            for defaced_nii in glob.glob(
+                f"{final_destination}/**/*_defaced*.nii*", recursive=True
+            )
+        ]
+        for leftover in leftover_files:
+            leftover.unlink()
 
     print(f"completed copying dataset to {final_destination}")
 
@@ -770,7 +773,9 @@ def move_defaced_images(
     :param move_files: delete defaced images in "working" directory, e.g. move them to the destination dir instead of copying them there, defaults to False
     :type move_files: bool, optional
     """
-    # update paths in mapping dict
+    # Create a new mapping with destination paths
+    dest_mapping = {}
+
     for defaced, raw in mapping_dict.items():
         # get common path and replace with final_destination to get new path
         common_path = os.path.commonpath([defaced.path, raw.path])
@@ -791,15 +796,13 @@ def move_defaced_images(
                 ]
             )
         )
-        mapping_dict[defaced] = new_path
+        dest_mapping[defaced] = new_path
 
     # copy defaced images to new location
-    for defaced, raw in mapping_dict.items():
-        if pathlib.Path(raw).exists() and pathlib.Path(defaced).exists():
-            shutil.copy(defaced.path, raw)
-        else:
-            pathlib.Path(raw).parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy(defaced.path, raw)
+    for defaced, dest_path in dest_mapping.items():
+        if pathlib.Path(defaced).exists():
+            pathlib.Path(dest_path).parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy(defaced.path, dest_path)
 
         if move_files:
             os.remove(defaced.path)
@@ -1056,6 +1059,12 @@ def cli():
         required=False,
         default=[],
     )
+    parser.add_argument(
+        "--open-browser",
+        action="store_true",
+        default=False,
+        help="Open browser automatically after QA report generation",
+    )
 
     arguments = parser.parse_args()
     return arguments
@@ -1255,6 +1264,45 @@ def main():  # noqa: max-complexity: 12
             session_label_exclude=args.session_label_exclude,
         )
         petdeface.run()
+
+        # Generate QA reports if requested
+        print("\n" + "=" * 60)
+        print("Generating QA reports...")
+        print("=" * 60)
+
+        try:
+            # Determine the defaced directory based on placement
+            if args.placement == "adjacent":
+                defaced_dir = args.bids_dir.parent / f"{args.bids_dir.name}_defaced"
+            elif args.placement == "inplace":
+                defaced_dir = args.bids_dir
+            elif args.placement == "derivatives":
+                defaced_dir = args.bids_dir / "derivatives" / "petdeface"
+            else:
+                defaced_dir = (
+                    args.output_dir
+                    if args.output_dir
+                    else args.bids_dir / "derivatives" / "petdeface"
+                )
+
+            # Run QA
+            qa_result = run_qa(
+                faced_dir=str(args.bids_dir),
+                defaced_dir=str(defaced_dir),
+                subject=(
+                    " ".join(args.participant_label) if args.participant_label else None
+                ),
+                open_browser=args.open_browser,
+            )
+
+            print("\n" + "=" * 60)
+            print("QA reports generated successfully!")
+            print(f"Reports available at: {qa_result['output_dir']}")
+            print("=" * 60)
+
+        except Exception as e:
+            print(f"\nError generating QA reports: {e}")
+            print("QA report generation failed, but defacing completed successfully.")
 
 
 if __name__ == "__main__":
