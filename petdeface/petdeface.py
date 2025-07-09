@@ -1271,7 +1271,6 @@ def main():  # noqa: max-complexity: 12
         print("=" * 60)
 
         try:
-
             # Determine the defaced directory based on placement
             if args.placement == "adjacent":
                 defaced_dir = args.bids_dir.parent / f"{args.bids_dir.name}_defaced"
@@ -1291,9 +1290,7 @@ def main():  # noqa: max-complexity: 12
                 faced_dir=str(args.bids_dir),
                 defaced_dir=str(defaced_dir),
                 subject=(
-                    " ".join(args.participant_label)
-                    if args.participant_label
-                    else None
+                    " ".join(args.participant_label) if args.participant_label else None
                 ),
                 open_browser=args.open_browser,
             )
@@ -1305,9 +1302,7 @@ def main():  # noqa: max-complexity: 12
 
         except Exception as e:
             print(f"\nError generating QA reports: {e}")
-            print(
-                "QA report generation failed, but defacing completed successfully."
-            )
+            print("QA report generation failed, but defacing completed successfully.")
 
 
 if __name__ == "__main__":

@@ -22,9 +22,6 @@ from tempfile import TemporaryDirectory
 from pathlib import Path
 
 
-
-
-
 def preprocess_single_subject(s, output_dir):
     """Preprocess a single subject's images (for parallel processing)."""
     temp_dir = os.path.join(output_dir, "temp_3d_images")
