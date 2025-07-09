@@ -26,16 +26,34 @@ from petutils.petutils import collect_anat_and_pet
 from importlib.metadata import version
 
 
-try:
-    from mideface import ApplyMideface
-    from mideface import Mideface
+# Import local modules - handle both script and module execution
+import sys
+import os
+from pathlib import Path
+
+# Determine if we're running as a script (including through debugger)
+is_script = (
+    __name__ == "__main__"
+    or len(sys.argv) > 0
+    and sys.argv[0].endswith("petdeface.py")
+    or "debugpy" in sys.modules
+)
+
+if is_script:
+    # Running as script - add current directory to path for local imports
+    current_dir = Path(__file__).parent
+    if str(current_dir) not in sys.path:
+        sys.path.insert(0, str(current_dir))
+
+    # Import using absolute imports (script mode)
+    from mideface import ApplyMideface, Mideface
     from pet import WeightedAverage
     from qa import run_qa
     from utils import run_validator
     from noanat import copy_default_anat_to_subject, remove_default_anat
-except ModuleNotFoundError:
-    from .mideface import ApplyMideface
-    from .mideface import Mideface
+else:
+    # Running as module - use relative imports
+    from .mideface import ApplyMideface, Mideface
     from .pet import WeightedAverage
     from .qa import run_qa
     from .utils import run_validator
@@ -1321,23 +1339,12 @@ def main():  # noqa: max-complexity: 12
 
         try:
             # Determine the defaced directory based on placement
-            if args.placement == "adjacent":
-                defaced_dir = args.bids_dir.parent / f"{args.bids_dir.name}_defaced"
-            elif args.placement == "inplace":
-                defaced_dir = args.bids_dir
-            elif args.placement == "derivatives":
-                defaced_dir = args.bids_dir / "derivatives" / "petdeface"
-            else:
-                defaced_dir = (
-                    args.output_dir
-                    if args.output_dir
-                    else args.bids_dir / "derivatives" / "petdeface"
-                )
 
             # Run QA
             qa_result = run_qa(
                 faced_dir=str(args.bids_dir),
-                defaced_dir=str(defaced_dir),
+                defaced_dir=str(args.output_dir),
+                output_dir=str(args.bids_dir / "derivatives" / "petdeface" / "qa"),
                 subject=(
                     " ".join(args.participant_label) if args.participant_label else None
                 ),
