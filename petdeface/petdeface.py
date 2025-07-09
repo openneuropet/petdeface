@@ -5,8 +5,7 @@ import pathlib
 import re
 import sys
 import shutil
-from bids import BIDSLayout
-import importlib
+from bids import BIDSLayout, BIDSLayoutIndexer
 import glob
 from platform import system
 
@@ -31,11 +30,15 @@ try:
     from mideface import ApplyMideface
     from mideface import Mideface
     from pet import WeightedAverage
+    from qa import run_qa
+    from utils import run_validator
     from noanat import copy_default_anat_to_subject, remove_default_anat
 except ModuleNotFoundError:
     from .mideface import ApplyMideface
     from .mideface import Mideface
     from .pet import WeightedAverage
+    from .qa import run_qa
+    from .utils import run_validator
     from .noanat import copy_default_anat_to_subject, remove_default_anat
 
 
@@ -211,6 +214,10 @@ def deface(args: Union[dict, argparse.Namespace]) -> None:
     else:
         args = args
 
+    # first check to see if the dataset is bids valid
+    if not args.skip_bids_validator:
+        run_validator(args.bids_dir)
+
     if not check_valid_fs_license() and not locate_freesurfer_license().exists():
         raise Exception("You need a valid FreeSurfer license to proceed!")
 
@@ -259,6 +266,8 @@ def deface(args: Union[dict, argparse.Namespace]) -> None:
 
     petdeface_wf = Workflow(name="petdeface_wf", base_dir=output_dir)
 
+    missing_file_errors = []
+
     for subject_id in subjects:
         try:
             single_subject_wf = init_single_subject_wf(
@@ -270,11 +279,19 @@ def deface(args: Union[dict, argparse.Namespace]) -> None:
                 session_label_exclude=args.session_label_exclude,
                 use_template_anat=args.use_template_anat,
             )
-        except FileNotFoundError:
+        except FileNotFoundError as error:
             single_subject_wf = None
-
+            missing_file_errors.append(str(error))
         if single_subject_wf:
             petdeface_wf.add_nodes([single_subject_wf])
+
+    if (
+        missing_file_errors
+    ):  # todo add conditional later for cases where a template t1w is used
+        raise FileNotFoundError(
+            "The following subjects are missing t1w images:\n"
+            + "\n".join(missing_file_errors)
+        )
 
     try:
         petdeface_wf.write_graph("petdeface.dot", graph2use="colored", simple_form=True)
@@ -286,7 +303,10 @@ def deface(args: Union[dict, argparse.Namespace]) -> None:
     write_out_dataset_description_json(args.bids_dir)
 
     # remove temp outputs - this is commented out to enable easier testing for now
-    shutil.rmtree(os.path.join(output_dir, "petdeface_wf"))
+    if str(os.getenv("PETDEFACE_DEBUG", "false")).lower() != "true":
+        shutil.rmtree(os.path.join(output_dir, "petdeface_wf"))
+
+    return {"subjects": subjects}
 
 
 def init_single_subject_wf(
@@ -458,6 +478,14 @@ def init_single_subject_wf(
             if ses_id.replace("ses-", "") in sessions_to_exclude:
                 continue
 
+            # collect tracer
+            if re.search("trc-[^_|\/]*", str(pet_file)):
+                pet_string += "_" + re.search("trc-[^_|\/]*", str(pet_file)).group(0)
+
+            # collect recontstruction
+            if re.search("rec-[^_|\/]*", str(pet_file)):
+                pet_string += "_" + re.search("rec-[^_|\/]*", str(pet_file)).group(0)
+
             # collect run info from pet file
             try:
                 run_id = "_" + re.search("run-[^_|\/]*", str(pet_file)).group(0)
@@ -475,7 +503,7 @@ def init_single_subject_wf(
             mricoreg = MRICoreg(reference_file=t1w_file)
             if use_template_anat:
                 mricoreg.inputs.dof = 12
-            
+
             mricoreg.inputs.out_lta_file = f"{pet_string}{run_id}_desc-pet2anat_pet.lta"
 
             coreg_pet_to_t1w = Node(mricoreg, "coreg_pet_to_t1w")
@@ -571,7 +599,13 @@ def write_out_dataset_description_json(input_bids_dir, output_bids_dir=None):
 
 
 def wrap_up_defacing(
-    path_to_dataset, output_dir=None, placement="adjacent", remove_existing=True
+    path_to_dataset,
+    output_dir=None,
+    placement="adjacent",
+    remove_existing=True,
+    participant_label_exclude=[],
+    session_label_exclude=[],
+    indexer=None,
 ):
     """
     This function maps the output of this pipeline to the original dataset and depending on the
@@ -605,10 +639,25 @@ def wrap_up_defacing(
     :type placement: str, optional
     :param remove_existing: _description_, defaults to True
     :type remove_existing: bool, optional
+    :param participant_label_exclude: Excludes set of participants from the finalized output
+    :type participant_label_exclude: list, optional
+    :param session_label_exclude: Excludes set of sessions from the finalized output
+    :type session_label_exclude: list, optional
+    :param indexer: Pre-built BIDSLayoutIndexer with exclusion patterns, defaults to None
+    :type indexer: BIDSLayoutIndexer, optional
     :raises ValueError: _description_
     """
-    # get bids layout of dataset
-    layout = BIDSLayout(path_to_dataset, derivatives=True)
+    # Use provided indexer or create one from exclude lists (fallback for compatibility)
+    if indexer is None:
+        subjects_to_exclude = [f"sub-{sub}/*" for sub in participant_label_exclude]
+        sessions_to_exclude = [f"*ses-{ses}/*" for ses in session_label_exclude]
+        exclude_total = subjects_to_exclude + sessions_to_exclude
+        indexer = BIDSLayoutIndexer(ignore=exclude_total)
+
+    # get bids layout of dataset using the indexer
+    layout = BIDSLayout(
+        path_to_dataset, derivatives=True, validate=False, indexer=indexer
+    )
 
     # collect defaced images
     try:
@@ -621,7 +670,8 @@ def wrap_up_defacing(
         sys.exit(1)
 
     # collect all original images and jsons
-    raw_only = BIDSLayout(path_to_dataset, derivatives=False)
+    raw_only = BIDSLayout(path_to_dataset, derivatives=False, indexer=indexer)
+
     raw_images_only = raw_only.get(suffix=["pet", "T1w"])
 
     # if output_dir is not None and is not the same as the input dir we want to clear it out
@@ -648,8 +698,27 @@ def wrap_up_defacing(
         else:
             final_destination = output_dir
 
-        # copy original dataset to new location
+        # copy original dataset to new location, respecting exclusions
         for entry in raw_only.files:
+            # Check if this file belongs to an excluded subject
+            should_exclude = False
+            for excluded_subject in participant_label_exclude:
+                # Handle both cases: excluded_subject with or without 'sub-' prefix
+                if excluded_subject.startswith("sub-"):
+                    subject_pattern = f"/{excluded_subject}/"
+                    subject_pattern_underscore = f"/{excluded_subject}_"
+                else:
+                    subject_pattern = f"/sub-{excluded_subject}/"
+                    subject_pattern_underscore = f"/sub-{excluded_subject}_"
+
+                if subject_pattern in entry or subject_pattern_underscore in entry:
+                    should_exclude = True
+                    break
+
+            # Skip excluded subject files, but copy everything else (including dataset-level files)
+            if should_exclude:
+                continue
+
             copy_path = entry.replace(str(path_to_dataset), str(final_destination))
             pathlib.Path(copy_path).parent.mkdir(
                 parents=True, exist_ok=True, mode=0o775
@@ -694,8 +763,9 @@ def wrap_up_defacing(
             desc="defaced",
             return_type="file",
         )
-        for extraneous in derivatives:
-            os.remove(extraneous)
+        if str(os.getenv("PETDEFAC_DEBUG", "false")).lower() != "true":
+            for extraneous in derivatives:
+                os.remove(extraneous)
 
     elif placement == "derivatives":
         pass
@@ -704,15 +774,16 @@ def wrap_up_defacing(
             "placement must be one of ['adjacent', 'inplace', 'derivatives']"
         )
 
-    # clean up any errantly leftover files with globe in destination folder
-    leftover_files = [
-        pathlib.Path(defaced_nii)
-        for defaced_nii in glob.glob(
-            f"{final_destination}/**/*_defaced*.nii*", recursive=True
-        )
-    ]
-    for leftover in leftover_files:
-        leftover.unlink()
+    if not os.getenv("PETDEFACE_DEBUG"):
+        # clean up any errantly leftover files with glob in destination folder
+        leftover_files = [
+            pathlib.Path(defaced_nii)
+            for defaced_nii in glob.glob(
+                f"{final_destination}/**/*_defaced*.nii*", recursive=True
+            )
+        ]
+        for leftover in leftover_files:
+            leftover.unlink()
 
     print(f"completed copying dataset to {final_destination}")
 
@@ -733,7 +804,9 @@ def move_defaced_images(
     :param move_files: delete defaced images in "working" directory, e.g. move them to the destination dir instead of copying them there, defaults to False
     :type move_files: bool, optional
     """
-    # update paths in mapping dict
+    # Create a new mapping with destination paths
+    dest_mapping = {}
+
     for defaced, raw in mapping_dict.items():
         # get common path and replace with final_destination to get new path
         common_path = os.path.commonpath([defaced.path, raw.path])
@@ -754,15 +827,13 @@ def move_defaced_images(
                 ]
             )
         )
-        mapping_dict[defaced] = new_path
+        dest_mapping[defaced] = new_path
 
     # copy defaced images to new location
-    for defaced, raw in mapping_dict.items():
-        if pathlib.Path(raw).exists() and pathlib.Path(defaced).exists():
-            shutil.copy(defaced.path, raw)
-        else:
-            pathlib.Path(raw).parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy(defaced.path, raw)
+    for defaced, dest_path in dest_mapping.items():
+        if pathlib.Path(defaced).exists():
+            pathlib.Path(dest_path).parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy(defaced.path, dest_path)
 
         if move_files:
             os.remove(defaced.path)
@@ -780,7 +851,7 @@ class PetDeface:
         anat_only=False,
         subject="",
         n_procs=2,
-        skip_bids_validator=True,
+        skip_bids_validator=False,
         remove_existing=True,
         placement="adjacent",
         preview_pics=True,
@@ -803,6 +874,9 @@ class PetDeface:
         self.session_label_exclude = session_label_exclude
         self.use_template_anat = use_template_anat
 
+        # Build the exclusion indexer
+        self.exclude_indexer = self._build_exclusion_indexer()
+
         # check if freesurfer license is valid
         self.fs_license = check_valid_fs_license()
         if not self.fs_license:
@@ -813,6 +887,64 @@ class PetDeface:
                 print(
                     f"Using freesurfer license at {self.fs_license} found in system env at $FREESURFER_LICENSE"
                 )
+
+    def _build_exclusion_indexer(self):
+        """
+        Build a comprehensive BIDSLayoutIndexer that excludes subjects and sessions based on:
+        1. Explicit exclusion lists (participant_label_exclude, session_label_exclude)
+        2. Implicit exclusions from include-only lists (participant_label, session_label)
+
+        Returns:
+            BIDSLayoutIndexer: Indexer configured to ignore excluded subjects/sessions
+        """
+        # Create a temporary layout to get all available subjects and sessions
+        temp_layout = BIDSLayout(self.bids_dir, derivatives=False, validate=False)
+        all_subjects = temp_layout.get_subjects()
+        all_sessions = temp_layout.get_sessions()
+
+        # Start with explicitly excluded subjects
+        excluded_subjects = set(self.participant_label_exclude)
+
+        # If specific subjects are requested (include-only), exclude all others
+        if self.subject and self.subject != "":
+            # Handle both string and list formats
+            if isinstance(self.subject, str):
+                included_subjects = [self.subject] if self.subject else []
+            else:
+                included_subjects = self.subject
+
+            # Remove 'sub-' prefix if present
+            included_subjects = [sub.replace("sub-", "") for sub in included_subjects]
+
+            # Add all subjects not in the include list to exclusions
+            excluded_subjects.update(
+                sub for sub in all_subjects if sub not in included_subjects
+            )
+
+        # Start with explicitly excluded sessions
+        excluded_sessions = set(self.session_label_exclude)
+
+        # If specific sessions are requested (include-only), exclude all others
+        if self.session_label:
+            # Remove 'ses-' prefix if present
+            included_sessions = [ses.replace("ses-", "") for ses in self.session_label]
+
+            # Add all sessions not in the include list to exclusions
+            excluded_sessions.update(
+                ses for ses in all_sessions if ses not in included_sessions
+            )
+
+        # Convert to ignore patterns for BIDSLayoutIndexer
+        ignore_patterns = []
+
+        # Add subject exclusion patterns
+        ignore_patterns.extend([f"sub-{sub}/*" for sub in excluded_subjects])
+
+        # Add session exclusion patterns
+        ignore_patterns.extend([f"*/ses-{ses}/*" for ses in excluded_sessions])
+
+        # Build and return the indexer
+        return BIDSLayoutIndexer(ignore=ignore_patterns)
 
     def run(self):
         """
@@ -849,6 +981,9 @@ class PetDeface:
             self.output_dir,
             placement=self.placement,
             remove_existing=self.remove_existing,
+            participant_label_exclude=self.participant_label_exclude,
+            session_label_exclude=self.session_label_exclude,
+            indexer=self.exclude_indexer,
         )
 
 
@@ -967,16 +1102,16 @@ def cli():
     )
     parser.add_argument(
         "--use_template_anat",
-        choices=["t1", "mni", "pet"],
-        help="Use a template file for PET scans that don't have an anatomical MRI. Template files "
-        "are included in this library, alternatively, if the tracer is amenable "
-        "users can use this argument with 'pet' and create an average of the PET scan "
-        "and substitute it as a T1w image. These template/substitute anatomical files "
-        "are removed from the output after they've been used to deface the PET image."
-        "Choices are: "
-        "t1   -> the sub-01_T1w.nii.gz packaged with this library "
-        "mni  -> the MNI305 atlas included with FreeSurfer"
-        "pet  -> an averaged PET to T1w image taken from the subject missing an MR",
+        help="Use template anatomical image when no T1w is available for PET scans. Options: 't1', 'mni', or 'pet'",
+        type=str,
+        required=False,
+        default=False,
+    )
+    parser.add_argument(
+        "--open_browser",
+        help="Open browser to show QA reports after completion",
+        action="store_true",
+        default=False,
     )
 
     arguments = parser.parse_args()
@@ -1178,6 +1313,45 @@ def main():  # noqa: max-complexity: 12
             use_template_anat=args.use_template_anat,
         )
         petdeface.run()
+
+        # Generate QA reports if requested
+        print("\n" + "=" * 60)
+        print("Generating QA reports...")
+        print("=" * 60)
+
+        try:
+            # Determine the defaced directory based on placement
+            if args.placement == "adjacent":
+                defaced_dir = args.bids_dir.parent / f"{args.bids_dir.name}_defaced"
+            elif args.placement == "inplace":
+                defaced_dir = args.bids_dir
+            elif args.placement == "derivatives":
+                defaced_dir = args.bids_dir / "derivatives" / "petdeface"
+            else:
+                defaced_dir = (
+                    args.output_dir
+                    if args.output_dir
+                    else args.bids_dir / "derivatives" / "petdeface"
+                )
+
+            # Run QA
+            qa_result = run_qa(
+                faced_dir=str(args.bids_dir),
+                defaced_dir=str(defaced_dir),
+                subject=(
+                    " ".join(args.participant_label) if args.participant_label else None
+                ),
+                open_browser=args.open_browser,
+            )
+
+            print("\n" + "=" * 60)
+            print("QA reports generated successfully!")
+            print(f"Reports available at: {qa_result['output_dir']}")
+            print("=" * 60)
+
+        except Exception as e:
+            print(f"\nError generating QA reports: {e}")
+            print("QA report generation failed, but defacing completed successfully.")
 
 
 if __name__ == "__main__":
