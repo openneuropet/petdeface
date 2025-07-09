@@ -22,6 +22,9 @@ from tempfile import TemporaryDirectory
 from pathlib import Path
 
 
+
+
+
 def preprocess_single_subject(s, output_dir):
     """Preprocess a single subject's images (for parallel processing)."""
     temp_dir = os.path.join(output_dir, "temp_3d_images")
@@ -1188,50 +1191,36 @@ def create_gif_index_html(subjects, output_dir, size="compact"):
     return index_file
 
 
-def main():
-    parser = argparse.ArgumentParser(
-        description="Generate static HTML comparisons of PET deface results using nilearn."
-    )
-    parser.add_argument(
-        "--faced-dir", required=True, help="Directory for original (faced) dataset"
-    )
-    parser.add_argument(
-        "--defaced-dir", required=True, help="Directory for defaced dataset"
-    )
-    parser.add_argument(
-        "--output-dir",
-        help="Output directory for HTML files (default: {orig_folder}_{defaced_folder}_qa)",
-    )
-    parser.add_argument(
-        "--open-browser", action="store_true", help="Open browser automatically"
-    )
-    parser.add_argument(
-        "--n-jobs",
-        type=int,
-        default=None,
-        help="Number of parallel jobs (default: all cores)",
-    )
-    parser.add_argument(
-        "--subject",
-        type=str,
-        help="Filter to specific subject (e.g., 'sub-01' or 'sub-01_ses-baseline')",
-    )
+def run_qa(
+    faced_dir,
+    defaced_dir,
+    output_dir=None,
+    subject=None,
+    n_jobs=None,
+    size="compact",
+    open_browser=False,
+):
+    """
+    Run QA report generation programmatically.
 
-    parser.add_argument(
-        "--size",
-        type=str,
-        choices=["compact", "full"],
-        default="compact",
-        help="Image size: 'compact' for closer together or 'full' for entire page width",
-    )
-    args = parser.parse_args()
+    Args:
+        faced_dir (str): Path to original (faced) dataset directory
+        defaced_dir (str): Path to defaced dataset directory
+        output_dir (str, optional): Output directory for HTML files
+        subject (str, optional): Filter to specific subject
+        n_jobs (int, optional): Number of parallel jobs
+        size (str): Image size - 'compact' or 'full'
+        open_browser (bool): Whether to open browser automatically
 
-    faced_dir = os.path.abspath(args.faced_dir)
-    defaced_dir = os.path.abspath(args.defaced_dir)
+    Returns:
+        dict: Information about generated files
+    """
+    faced_dir = os.path.abspath(faced_dir)
+    defaced_dir = os.path.abspath(defaced_dir)
 
     # Create output directory name based on input directories
-    if args.output_dir:
-        output_dir = os.path.abspath(args.output_dir)
+    if output_dir:
+        output_dir = os.path.abspath(output_dir)
     else:
         orig_folder = os.path.basename(faced_dir)
         defaced_folder = os.path.basename(defaced_dir)
@@ -1247,23 +1236,24 @@ def main():
     print(f"Found {len(subjects)} subjects with matching files")
 
     # Filter to specific subject if requested
-    if args.subject:
+    if subject:
         original_count = len(subjects)
-        subjects = [s for s in subjects if args.subject in s["id"]]
+        subjects = [s for s in subjects if subject in s["id"]]
         print(
-            f"Filtered to {len(subjects)} subjects matching '{args.subject}' (from {original_count} total)"
+            f"Filtered to {len(subjects)} subjects matching '{subject}' (from {original_count} total)"
         )
 
         if not subjects:
-            print(f"No subjects found matching '{args.subject}'")
+            print(f"No subjects found matching '{subject}'")
             print("Available subjects:")
             all_subjects = build_subjects_from_datasets(faced_dir, defaced_dir)
             for s in all_subjects:
                 print(f"  - {s['id']}")
-            exit(1)
+            raise ValueError(f"No subjects found matching '{subject}'")
 
     # Set number of jobs for parallel processing
-    n_jobs = args.n_jobs if args.n_jobs else mp.cpu_count()
+    if n_jobs is None:
+        n_jobs = mp.cpu_count()
     print(f"Using {n_jobs} parallel processes")
 
     # Preprocess all images once (4D→3D conversion)
@@ -1281,7 +1271,7 @@ def main():
         process_func = partial(
             process_subject,
             output_dir=output_dir,
-            size=args.size,
+            size=size,
         )
 
         # Process all subjects in parallel
@@ -1295,9 +1285,9 @@ def main():
 
     # Create both HTML files
     side_by_side_file = create_side_by_side_index_html(
-        preprocessed_subjects, output_dir, args.size
+        preprocessed_subjects, output_dir, size
     )
-    animated_file = create_gif_index_html(preprocessed_subjects, output_dir, args.size)
+    animated_file = create_gif_index_html(preprocessed_subjects, output_dir, size)
 
     # Create a simple index that links to both
     index_html = f"""
@@ -1379,13 +1369,13 @@ def main():
         "--output-dir",
         output_dir,
         "--size",
-        args.size,
+        size,
     ]
-    if args.n_jobs:
-        command_parts.extend(["--n-jobs", str(args.n_jobs)])
-    if args.subject:
-        command_parts.extend(["--subject", args.subject])
-    if args.open_browser:
+    if n_jobs:
+        command_parts.extend(["--n-jobs", str(n_jobs)])
+    if subject:
+        command_parts.extend(["--subject", subject])
+    if open_browser:
         command_parts.append("--open-browser")
 
     command_str = " ".join(command_parts)
@@ -1404,12 +1394,71 @@ def main():
     print(f"Saved command to: {command_file}")
 
     # Open browser if requested
-    if args.open_browser:
+    if open_browser:
         webbrowser.open(f"file://{index_file}")
         print(f"Opened browser to: {index_file}")
 
     print(f"\nAll files generated in: {output_dir}")
     print(f"Open index.html in your browser to view comparisons")
+
+    return {
+        "output_dir": output_dir,
+        "side_by_side_file": side_by_side_file,
+        "animated_file": animated_file,
+        "index_file": index_file,
+        "command_file": command_file,
+        "subjects_processed": len(successful),
+        "total_subjects": len(preprocessed_subjects),
+    }
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Generate static HTML comparisons of PET deface results using nilearn."
+    )
+    parser.add_argument(
+        "--faced-dir", required=True, help="Directory for original (faced) dataset"
+    )
+    parser.add_argument(
+        "--defaced-dir", required=True, help="Directory for defaced dataset"
+    )
+    parser.add_argument(
+        "--output-dir",
+        help="Output directory for HTML files (default: {orig_folder}_{defaced_folder}_qa)",
+    )
+    parser.add_argument(
+        "--open-browser", action="store_true", help="Open browser automatically"
+    )
+    parser.add_argument(
+        "--n-jobs",
+        type=int,
+        default=None,
+        help="Number of parallel jobs (default: all cores)",
+    )
+    parser.add_argument(
+        "--subject",
+        type=str,
+        help="Filter to specific subject (e.g., 'sub-01' or 'sub-01_ses-baseline')",
+    )
+
+    parser.add_argument(
+        "--size",
+        type=str,
+        choices=["compact", "full"],
+        default="compact",
+        help="Image size: 'compact' for closer together or 'full' for entire page width",
+    )
+    args = parser.parse_args()
+
+    return run_qa(
+        faced_dir=args.faced_dir,
+        defaced_dir=args.defaced_dir,
+        output_dir=args.output_dir,
+        subject=args.subject,
+        n_jobs=args.n_jobs,
+        size=args.size,
+        open_browser=args.open_browser,
+    )
 
 
 if __name__ == "__main__":

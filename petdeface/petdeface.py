@@ -32,11 +32,13 @@ try:
     from mideface import Mideface
     from pet import WeightedAverage
     from utils import run_validator
+    from qa import run_qa
 except ModuleNotFoundError:
     from .mideface import ApplyMideface
     from .mideface import Mideface
     from .pet import WeightedAverage
     from .utils import run_validator
+    from .qa import run_qa
 
 
 # collect version from pyproject.toml
@@ -1058,16 +1060,10 @@ def cli():
         default=[],
     )
     parser.add_argument(
-        "--qa",
-        action="store_true",
-        default=False,
-        help="Generate QA reports after defacing is complete",
-    )
-    parser.add_argument(
         "--open-browser",
         action="store_true",
         default=False,
-        help="Open browser automatically after QA report generation (requires --qa)",
+        help="Open browser automatically after QA report generation",
     )
 
     arguments = parser.parse_args()
@@ -1270,63 +1266,48 @@ def main():  # noqa: max-complexity: 12
         petdeface.run()
 
         # Generate QA reports if requested
-        if args.qa:
+        print("\n" + "=" * 60)
+        print("Generating QA reports...")
+        print("=" * 60)
+
+        try:
+
+            # Determine the defaced directory based on placement
+            if args.placement == "adjacent":
+                defaced_dir = args.bids_dir.parent / f"{args.bids_dir.name}_defaced"
+            elif args.placement == "inplace":
+                defaced_dir = args.bids_dir
+            elif args.placement == "derivatives":
+                defaced_dir = args.bids_dir / "derivatives" / "petdeface"
+            else:
+                defaced_dir = (
+                    args.output_dir
+                    if args.output_dir
+                    else args.bids_dir / "derivatives" / "petdeface"
+                )
+
+            # Run QA
+            qa_result = run_qa(
+                faced_dir=str(args.bids_dir),
+                defaced_dir=str(defaced_dir),
+                subject=(
+                    " ".join(args.participant_label)
+                    if args.participant_label
+                    else None
+                ),
+                open_browser=args.open_browser,
+            )
+
             print("\n" + "=" * 60)
-            print("Generating QA reports...")
+            print("QA reports generated successfully!")
+            print(f"Reports available at: {qa_result['output_dir']}")
             print("=" * 60)
 
-            try:
-                # Import qa module
-                from petdeface import qa
-                import sys
-
-                # Determine the defaced directory based on placement
-                if args.placement == "adjacent":
-                    defaced_dir = args.bids_dir.parent / f"{args.bids_dir.name}_defaced"
-                elif args.placement == "inplace":
-                    defaced_dir = args.bids_dir
-                elif args.placement == "derivatives":
-                    defaced_dir = args.bids_dir / "derivatives" / "petdeface"
-                else:
-                    defaced_dir = (
-                        args.output_dir
-                        if args.output_dir
-                        else args.bids_dir / "derivatives" / "petdeface"
-                    )
-
-                # Build QA arguments as sys.argv style
-                qa_argv = [
-                    "qa.py",  # Script name
-                    "--faced-dir",
-                    str(args.bids_dir),
-                    "--defaced-dir",
-                    str(defaced_dir),
-                ]
-
-                if args.open_browser:
-                    qa_argv.append("--open-browser")
-
-                if args.participant_label:
-                    qa_argv.extend(["--subject", " ".join(args.participant_label)])
-
-                # Temporarily replace sys.argv and run QA
-                original_argv = sys.argv
-                sys.argv = qa_argv
-
-                try:
-                    qa.main()
-                finally:
-                    sys.argv = original_argv
-
-                print("\n" + "=" * 60)
-                print("QA reports generated successfully!")
-                print("=" * 60)
-
-            except Exception as e:
-                print(f"\nError generating QA reports: {e}")
-                print(
-                    "QA report generation failed, but defacing completed successfully."
-                )
+        except Exception as e:
+            print(f"\nError generating QA reports: {e}")
+            print(
+                "QA report generation failed, but defacing completed successfully."
+            )
 
 
 if __name__ == "__main__":
