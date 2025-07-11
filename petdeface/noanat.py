@@ -1,4 +1,5 @@
 """Functionality for handling cases where anatomical images are not available."""
+
 import nibabel
 import numpy
 import shutil
@@ -318,17 +319,19 @@ def remove_default_anat(
             remaining_files = set(anat_dir.iterdir()) - set(created_files)
             if not remaining_files:
                 created_dirs.append(anat_dir)
+    if os.getenv("PETDEFACE_DEBUG", "").lower() != "true":
+        # Remove the files
+        for file_path in created_files:
+            if file_path.exists():
+                file_path.unlink()
+                print(f"Removed file: {file_path}")
 
-    # Remove the files
-    for file_path in created_files:
-        if file_path.exists():
-            file_path.unlink()
-            print(f"Removed file: {file_path}")
+        # Remove the directories (only if they're empty)
+        for dir_path in created_dirs:
+            if dir_path.exists() and not any(dir_path.iterdir()):
+                dir_path.rmdir()
+                print(f"Removed directory: {dir_path}")
 
-    # Remove the directories (only if they're empty)
-    for dir_path in created_dirs:
-        if dir_path.exists() and not any(dir_path.iterdir()):
-            dir_path.rmdir()
-            print(f"Removed directory: {dir_path}")
-
-    print("Cleanup completed successfully")
+        print("Cleanup completed successfully")
+    else:
+        print("PETDEFACE_DEBUG=true, leaving template T1w's in place")
