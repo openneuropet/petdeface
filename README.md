@@ -36,9 +36,9 @@ This software can be installed via source or via pip from PyPi with `pip install
 
 ```bash
 usage: petdeface.py [-h] [--anat_only] [--participant_label PARTICIPANT_LABEL [PARTICIPANT_LABEL ...]] [--docker] [--singularity] [--n_procs N_PROCS]
-                    [--skip_bids_validator] [--version] [--placement PLACEMENT] [--remove_existing] [--preview_pics]
+                    [--skip_bids_validator] [--version] [--placement PLACEMENT] [--remove_existing]
                     [--participant_label_exclude participant_label_exclude [participant_label_exclude ...]] [--session_label SESSION [SESSION ...]]
-                    [--session_label_exclude session_label_exclude [session_label_exclude ...]]
+                    [--session_label_exclude session_label_exclude [session_label_exclude ...]] [--open_browser]
                     bids_dir [output_dir] [analysis_level]
 
 PetDeface
@@ -63,8 +63,7 @@ options:
                         Where to place the defaced images. Options are 'adjacent': next to the bids_dir (default) in a folder appended with _defaced'inplace':
                         defaces the dataset in place, e.g. replaces faced PET and T1w images w/ defaced at bids_dir'derivatives': does all of the defacing within
                         the derivatives folder in bids_dir.
-  --remove_existing, -r
-                        Remove existing output files in output_dir.
+  --remove_existing, -r Remove existing output files in output_dir.
   --preview_pics        Create preview pictures of defacing, defaults to false for docker
   --participant_label_exclude participant_label_exclude [participant_label_exclude ...]
                         Exclude a subject(s) from the defacing workflow. e.g. --participant_label_exclude sub-01 sub-02
@@ -72,6 +71,7 @@ options:
                         Select only a specific session(s) to include in the defacing workflow
   --session_label_exclude session_label_exclude [session_label_exclude ...]
                         Select a specific session(s) to exclude from the defacing workflow
+  --open_browser        Open browser to show QA reports after completion
 ```
 
 Working example usage:
