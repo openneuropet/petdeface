@@ -188,7 +188,7 @@ registration and defacing. Three options are available:
 
 - **`--use_template_anat t1`**: Uses a T1w template included with the PETdeface library
 - **`--use_template_anat mni`**: Uses the MNI standard brain template  
-- **`--use_template_anat pet`**: Creates a template by averaging the PET data across time
+- **`--use_template_anat pet`**: Creates a template by averaging a subjects PET image and using that averaged image in place of a T1 image 
 
 **Important**: When using template anatomical images, it's crucial to validate the defacing quality. 
 Inspect the output using the generated HTML report (with `--open_browser`) or a NIfTI viewer to ensure 
