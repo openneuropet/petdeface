@@ -1405,7 +1405,7 @@ def run_qa(
     </html>
     """
 
-    index_file = os.path.join(output_dir, "index.html")
+    index_file = os.path.join(output_dir, "petdeface_report.html")
     with open(index_file, "w") as f:
         f.write(index_html)
 
@@ -1443,7 +1443,7 @@ def run_qa(
 
     print(f"Created side-by-side view: {side_by_side_file}")
     print(f"Created animated view: {animated_file}")
-    print(f"Created main index: {index_file}")
+    print(f"Created main report: {index_file}")
     print(f"Saved command to: {command_file}")
 
     # Open browser if requested
@@ -1452,13 +1452,13 @@ def run_qa(
         print(f"Opened browser to: {index_file}")
 
     print(f"\nAll files generated in: {output_dir}")
-    print(f"Open index.html in your browser to view comparisons")
+    print(f"Open petdeface_report.html in your browser to view comparisons")
 
     return {
         "output_dir": output_dir,
         "side_by_side_file": side_by_side_file,
         "animated_file": animated_file,
-        "index_file": index_file,
+        "report_file": index_file,
         "command_file": command_file,
         "subjects_processed": len(successful),
         "total_subjects": len(preprocessed_subjects),

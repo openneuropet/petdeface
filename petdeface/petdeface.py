@@ -1380,7 +1380,7 @@ def main():  # noqa: max-complexity: 12
             qa_result = run_qa(
                 faced_dir=str(args.bids_dir),
                 defaced_dir=str(args.output_dir),
-                output_dir=str(args.bids_dir / "derivatives" / "petdeface" / "qa"),
+                output_dir=str(args.bids_dir / "derivatives" / "petdeface"),
                 subject=(
                     " ".join(args.participant_label) if args.participant_label else None
                 ),
