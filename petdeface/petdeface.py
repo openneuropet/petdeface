@@ -8,11 +8,9 @@ import shutil
 from bids import BIDSLayout, BIDSLayoutIndexer
 import glob
 from platform import system
-
-# import shutil
+from pathlib import Path
 import subprocess
 from typing import Union
-
 from nipype.interfaces.freesurfer import MRICoreg
 from nipype.interfaces.io import DataSink
 from nipype.interfaces.base.traits_extension import File as traits_extensionFile
@@ -21,15 +19,8 @@ from niworkflows.engine.workflows import LiterateWorkflow as Workflow
 from niworkflows.utils.bids import collect_data
 from niworkflows.utils.bids import collect_participants
 from niworkflows.utils.misc import check_valid_fs_license
-
 from petutils.petutils import collect_anat_and_pet
 from importlib.metadata import version
-
-
-# Import local modules - handle both script and module execution
-import sys
-import os
-from pathlib import Path
 
 # Determine if we're running as a script (including through debugger)
 is_script = (
@@ -346,7 +337,7 @@ def init_single_subject_wf(
     :type bids_data: pathlib.Path, BIDSLayout]
     :param output_dir: _description_, defaults to None
     :type output_dir: pathlib.Path, optional
-    :param preview_pics: _description_, defaults to False
+    :param preview_pics: _description_, defaults to False (soon to be deprecated)
     :type preview_pics: bool, optional
     :param anat_only: _description_, defaults to False
     :type anat_only: bool, optional
@@ -872,7 +863,7 @@ class PetDeface:
         skip_bids_validator=False,
         remove_existing=True,
         placement="adjacent",
-        preview_pics=True,
+        preview_pics=False,
         participant_label_exclude=[],
         session_label=[],
         session_label_exclude=[],

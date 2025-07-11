@@ -123,6 +123,7 @@ options:
                         Select only a specific session(s) to include in the defacing workflow
   --session_label_exclude session_label_exclude [session_label_exclude ...]
                         Select a specific session(s) to exclude from the defacing workflow
+  --open_browser        Following defacing this flag will open the browser to view the defacing results
 
 Docker Based
 ------------
