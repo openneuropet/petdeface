@@ -37,7 +37,7 @@ if is_script:
         sys.path.insert(0, str(current_dir))
 
     # Import using absolute imports (script mode)
-    from mideface import ApplyMideface, Mideface
+    from mideface import ApplyMideface, Mideface, TemplateFacemask
     from pet import WeightedAverage
     from qa import run_qa
     from utils import run_validator
@@ -436,39 +436,84 @@ def init_single_subject_wf(
         if determine_in_docker():
             preview_pics = False
 
-        deface_t1w = Node(
-            Mideface(
-                in_file=pathlib.Path(t1w_file),
-                pics=preview_pics,
-                odir=".",
-                code=f"{anat_string}",
-            ),
-            name=f"deface_t1w_{anat_string}",
+        # Check if this is a template anatomical image created from PET averaging
+        is_template_from_pet = use_template_anat == "pet" and "desc-totallyat1w" in str(
+            t1w_file
         )
-        t1w_wf.connect(
-            [
-                (
-                    deface_t1w,
-                    datasink,
-                    [
-                        ("out_file", f"{anat_string.replace('_', '.')}.anat"),
-                        (
-                            "out_facemask",
-                            f"{anat_string.replace('_', '.')}.anat.@defacemask",
-                        ),
-                        (
-                            "out_before_pic",
-                            f"{anat_string.replace('_', '.')}.anat.@before",
-                        ),
-                        (
-                            "out_after_pic",
-                            f"{anat_string.replace('_', '.')}.anat.@after",
-                        ),
-                    ],
+
+        if is_template_from_pet:
+            # For PET-averaged templates, we need to create a facemask without defacing the template
+            # We'll use TemplateFacemask to generate the facemask without defacing the template
+            from mideface import TemplateFacemask
+
+            # Create a node that generates facemask but doesn't deface the template
+            template_facemask = Node(
+                TemplateFacemask(
+                    in_file=pathlib.Path(t1w_file),
+                    no_pics=True,  # No preview pics for templates
+                    no_post=True,  # No post-processing for templates
+                    odir=".",
+                    code=f"{anat_string}_template",
                 ),
-            ]
-        )
-        t1w_workflows[t1w_file] = {"workflow": t1w_wf, "anat_string": anat_string}
+                name=f"deface_t1w_{anat_string}",
+            )
+
+            # Only connect the facemask output, not the defaced template
+            # This way we get the facemask for PET defacing but don't deface the template itself
+            t1w_wf.connect(
+                [
+                    (
+                        template_facemask,
+                        datasink,
+                        [
+                            (
+                                "out_facemask",
+                                f"{anat_string.replace('_', '.')}.anat.@defacemask",
+                            ),
+                        ],
+                    ),
+                ]
+            )
+        else:
+            # Normal defacing for real anatomical images
+            deface_t1w = Node(
+                Mideface(
+                    in_file=pathlib.Path(t1w_file),
+                    pics=preview_pics,
+                    odir=".",
+                    code=f"{anat_string}",
+                ),
+                name=f"deface_t1w_{anat_string}",
+            )
+            t1w_wf.connect(
+                [
+                    (
+                        deface_t1w,
+                        datasink,
+                        [
+                            ("out_file", f"{anat_string.replace('_', '.')}.anat"),
+                            (
+                                "out_facemask",
+                                f"{anat_string.replace('_', '.')}.anat.@defacemask",
+                            ),
+                            (
+                                "out_before_pic",
+                                f"{anat_string.replace('_', '.')}.anat.@before",
+                            ),
+                            (
+                                "out_after_pic",
+                                f"{anat_string.replace('_', '.')}.anat.@after",
+                            ),
+                        ],
+                    ),
+                ]
+            )
+
+        t1w_workflows[t1w_file] = {
+            "workflow": t1w_wf,
+            "anat_string": anat_string,
+            "is_template_from_pet": is_template_from_pet,
+        }
 
     workflow = Workflow(name=name)
     if anat_only:
@@ -1111,7 +1156,7 @@ def cli():
     )
     parser.add_argument(
         "--use_template_anat",
-        help="Use template anatomical image when no T1w is available for PET scans. Options: 't1', 'mni', or 'pet'",
+        help="Use template anatomical image when no T1w is available for PET scans. Options: 't1' (included T1w template), 'mni' (MNI template), or 'pet' (averaged PET image).",
         type=str,
         required=False,
         default=False,
@@ -1354,12 +1399,12 @@ def main():  # noqa: max-complexity: 12
 
 def collect_subject_files(file_list: list) -> dict:
     """Collect files that share the same subject ID into a dictionary.
-    
+
     Parameters
     ----------
     file_list : list
         List of file paths to process
-        
+
     Returns
     -------
     dict
@@ -1367,16 +1412,16 @@ def collect_subject_files(file_list: list) -> dict:
         Format: {"sub-*": ["file1", "file2", ...]}
     """
     subject_files = {}
-    
+
     for file_path in file_list:
         # Extract subject ID using regex - matches 'sub-' followed by alphanumeric chars until underscore
-        match = re.search(r'sub-[a-zA-Z0-9]+(?=_)', str(file_path))
+        match = re.search(r"sub-[a-zA-Z0-9]+(?=_)", str(file_path))
         if match:
             sub_id = match.group(0)
             if sub_id not in subject_files:
                 subject_files[sub_id] = []
             subject_files[sub_id].append(str(file_path))
-            
+
     return subject_files
 
 
