@@ -1397,33 +1397,5 @@ def main():  # noqa: max-complexity: 12
             print("QA report generation failed, but defacing completed successfully.")
 
 
-def collect_subject_files(file_list: list) -> dict:
-    """Collect files that share the same subject ID into a dictionary.
-
-    Parameters
-    ----------
-    file_list : list
-        List of file paths to process
-
-    Returns
-    -------
-    dict
-        Dictionary mapping subject IDs to lists of their files
-        Format: {"sub-*": ["file1", "file2", ...]}
-    """
-    subject_files = {}
-
-    for file_path in file_list:
-        # Extract subject ID using regex - matches 'sub-' followed by alphanumeric chars until underscore
-        match = re.search(r"sub-[a-zA-Z0-9]+(?=_)", str(file_path))
-        if match:
-            sub_id = match.group(0)
-            if sub_id not in subject_files:
-                subject_files[sub_id] = []
-            subject_files[sub_id].append(str(file_path))
-
-    return subject_files
-
-
 if __name__ == "__main__":
     main()
