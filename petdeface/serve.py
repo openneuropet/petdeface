@@ -1,9 +1,10 @@
-from flask import Flask, render_template, send_from_directory
+from flask import Flask, render_template, send_from_directory, request, abort
 import os
 import socket
 import argparse
 import json
 from glob import glob
+from pathlib import Path
 
 
 def create_app(subjects):
@@ -11,14 +12,77 @@ def create_app(subjects):
 
     @app.route("/")
     def index():
-        return render_template("niivue.html", subjects=subjects)
+        # Prefix all nifti_paths with /file/ for the new file serving route
+        modified_subjects = []
+        for subject in subjects:
+            modified_subject = subject.copy()
+            modified_subject["sessions"] = []
+            for session in subject["sessions"]:
+                modified_session = session.copy()
+                # Convert filesystem path to URL path
+                if modified_session["nifti_path"].startswith("/"):
+                    # Absolute path - prefix with /file/
+                    modified_session["nifti_path"] = (
+                        f"/file{modified_session['nifti_path']}"
+                    )
+                else:
+                    # Relative path - keep as is for backward compatibility
+                    pass
+                modified_subject["sessions"].append(modified_session)
+            modified_subjects.append(modified_subject)
+
+        return render_template("niivue.html", subjects=modified_subjects)
 
     # Serve static files (NIfTI, etc.) from the project root
     @app.route("/<path:filename>")
     def serve_static(filename):
         return send_from_directory(
-            os.path.abspath(os.path.join(os.path.dirname(__file__), "..")), filename
+            __file__,
+            filename,
+            # os.path.dirname(__file__)
         )
+
+    # New route to serve files from anywhere on the filesystem
+    @app.route("/file/<path:filepath>")
+    def serve_file(filepath):
+        """
+        Serve files from anywhere on the local filesystem.
+        URL format: http://localhost:8000/file/path/to/file
+        Example: http://localhost:8000/file/Users/username/Documents/file.txt
+        """
+        try:
+            # Convert URL path to filesystem path
+            # Remove any leading slashes and decode URL encoding
+            clean_path = filepath.lstrip("/")
+
+            # Security check: prevent directory traversal attacks
+            if ".." in clean_path or clean_path.startswith("/"):
+                abort(403, description="Access denied")
+
+            # Convert to absolute path - reconstruct the full path
+            # The filepath comes from the URL without the leading slash
+            # So we need to add it back to make it an absolute path
+            if not clean_path.startswith("/"):
+                clean_path = "/" + clean_path
+
+            file_path = Path(clean_path)
+
+            # Additional security: ensure the file exists and is readable
+            if not file_path.exists():
+                abort(404, description="File not found")
+
+            if not file_path.is_file():
+                abort(400, description="Not a file")
+
+            # Serve the file
+            return send_from_directory(
+                directory=str(file_path.parent),
+                path=file_path.name,
+                as_attachment=False,
+            )
+
+        except Exception as e:
+            abort(500, description=f"Error serving file: {str(e)}")
 
     return app
 
@@ -81,21 +145,26 @@ def build_subjects_from_datasets(original_dir, defaced_dir):
         parts = orig_path.split(os.sep)
         sub_id = next((p for p in parts if p.startswith("sub-")), key)
         session = next((p for p in parts if p.startswith("ses-")), "session")
+        print(f"defaced_path {defaced_path}")
+        print(f"os.path.dirname(__file__) {os.path.dirname(__file__)}")
+        print(
+            f"os.path.relpath(defaced_path, os.path.dirname(__file__)) {os.path.relpath(defaced_path, os.path.dirname(__file__))}"
+        )
         subjects.append(
             {
                 "id": sub_id,
                 "sessions": [
                     {
                         "label": "Original",
-                        "nifti_path": os.path.relpath(
-                            orig_path, os.path.dirname(__file__)
-                        ),
+                        "nifti_path": orig_path,  # os.path.relpath(
+                        # orig_path, os.path.dirname(__file__)
+                        # ),
                     },
                     {
                         "label": "Defaced",
-                        "nifti_path": os.path.relpath(
-                            defaced_path, os.path.dirname(__file__)
-                        ),
+                        "nifti_path": defaced_path,  # os.path.relpath(
+                        # defaced_path, os.path.dirname(__file__)
+                        # ),
                     },
                 ],
             }
@@ -171,6 +240,5 @@ if __name__ == "__main__":
     else:
         subjects = sample_subjects
 
+    print(subjects)
     run_server(subjects)
-
-

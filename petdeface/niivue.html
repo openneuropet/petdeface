@@ -15,7 +15,7 @@
             <div style="font-size: 1.5em; font-weight: bold; margin-bottom: 12px; color: white; text-shadow: -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000, 2px 2px 0 #000; text-align: center;">
               {{ session.label }}<br>
               <span style="font-size: 0.8em; font-weight: normal; color: white; text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000;">
-                {{ session.nifti_path.split('/')[-1] }}
+                {{ session.nifti_path.replace('/file', '') if session.nifti_path.startswith('/file') else session.nifti_path }}
               </span>
             </div>
             <canvas id="gl_{{ subject.id }}_{{ session.label }}" width="640" height="640"></canvas>
