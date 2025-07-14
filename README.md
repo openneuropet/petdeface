@@ -64,7 +64,7 @@ options:
                         defaces the dataset in place, e.g. replaces faced PET and T1w images w/ defaced at bids_dir'derivatives': does all of the defacing within
                         the derivatives folder in bids_dir.
   --remove_existing, -r Remove existing output files in output_dir.
-  --preview_pics        Create preview pictures of defacing, defaults to false for docker
+  --preview_pics        Create preview pictures of defacing, defaults to false for docker (only works if FreeView is installed on machine)
   --participant_label_exclude participant_label_exclude [participant_label_exclude ...]
                         Exclude a subject(s) from the defacing workflow. e.g. --participant_label_exclude sub-01 sub-02
   --session_label SESSION [SESSION ...]
