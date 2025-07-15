@@ -86,12 +86,11 @@ def create_app(subjects):
         if not target_comparison:
             abort(404, description="Scan comparison not found")
 
-        # Prefix nifti_paths with /file/ (only if not already prefixed)
+        # Prefix nifti_paths with /file/
         for session in target_comparison["sessions"]:
-            # Remove any existing /file/ prefix first, then add it back
-            if session["nifti_path"].startswith("/file/"):
-                session["nifti_path"] = session["nifti_path"][6:]  # Remove /file/
-            if session["nifti_path"].startswith("/"):
+            if session["nifti_path"].startswith("/") and not session[
+                "nifti_path"
+            ].startswith("/file/"):
                 session["nifti_path"] = f"/file{session['nifti_path']}"
 
         return render_template("scan.html", comparison=target_comparison)
