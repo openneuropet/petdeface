@@ -466,6 +466,7 @@ def create_comparison_html(
     size="compact",
     orig_path=None,
     defaced_path=None,
+    flask_port=8000,
 ):
     """Create HTML comparison page for a subject using nilearn ortho views."""
 
@@ -737,8 +738,33 @@ def create_comparison_html(
         </div>
         """
 
-    html_content += """
+    # Determine scan type from file paths
+    scan_type = "pet"
+    if orig_path and "anat" in orig_path:
+        scan_type = "anat"
+    elif orig_path and "defacemask" in orig_path:
+        scan_type = "defacemask"
+
+    # Create NiiVue URL
+    niivue_url = f"http://localhost:{flask_port}/scan/{subject_id}/{scan_type}"
+
+    html_content += f"""
         <div style="text-align: center; margin-top: 30px;">
+            <a href="{niivue_url}" target="_blank" class="niivue-link-button" style="
+                display: inline-block;
+                margin: 10px 20px;
+                padding: 12px 24px;
+                background: #007bff;
+                color: white;
+                border-radius: 5px;
+                text-decoration: none;
+                font-weight: bold;
+                transition: background 0.2s;
+                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            " onmouseover="this.style.background='#0056b3'" onmouseout="this.style.background='#007bff'">
+                🔄 View in NiiVue (Interactive 3D)
+            </a>
+            <br>
             <a href="index.html">← Back to Index</a>
         </div>
     </body>
@@ -753,7 +779,7 @@ def create_comparison_html(
     return comparison_file
 
 
-def process_subject(subject, output_dir, size="compact"):
+def process_subject(subject, output_dir, size="compact", flask_port=8000):
     """Process a single subject (for parallel processing)."""
     print(f"Processing {subject['id']}...")
     try:
@@ -766,6 +792,7 @@ def process_subject(subject, output_dir, size="compact"):
             size,
             subject["orig_path"],
             subject["defaced_path"],
+            flask_port,
         )
         print(f"  Completed: {subject['id']}")
         return comparison_file
@@ -848,7 +875,9 @@ def build_subjects_from_datasets(orig_dir, defaced_dir):
     return subjects
 
 
-def create_side_by_side_index_html(subjects, output_dir, size="compact"):
+def create_side_by_side_index_html(
+    subjects, output_dir, size="compact", flask_port=8000
+):
     """Create index page for side-by-side comparisons."""
 
     comparisons_html = ""
@@ -863,6 +892,16 @@ def create_side_by_side_index_html(subjects, output_dir, size="compact"):
         orig_png = f"images/original_{subject_id}.png"
         defaced_png = f"images/defaced_{subject_id}.png"
 
+        # Determine scan type from file paths
+        scan_type = "pet"
+        if "anat" in orig_basename:
+            scan_type = "anat"
+        elif "defacemask" in orig_basename:
+            scan_type = "defacemask"
+
+        # Create NiiVue URL
+        niivue_url = f"http://localhost:{flask_port}/scan/{subject_id}/{scan_type}"
+
         comparisons_html += f"""
         <div class="subject-comparison">
             <h2>{subject_id}</h2>
@@ -875,6 +914,22 @@ def create_side_by_side_index_html(subjects, output_dir, size="compact"):
                     <h3>Defaced: {defaced_basename}</h3>
                     <img src="{defaced_png}" alt="Defaced: {defaced_basename}">
                 </div>
+            </div>
+            <div style="text-align: center; margin-top: 20px;">
+                <a href="{niivue_url}" target="_blank" class="niivue-link-button" style="
+                    display: inline-block;
+                    margin: 10px 20px;
+                    padding: 12px 24px;
+                    background: #007bff;
+                    color: white;
+                    border-radius: 5px;
+                    text-decoration: none;
+                    font-weight: bold;
+                    transition: background 0.2s;
+                    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+                " onmouseover="this.style.background='#0056b3'" onmouseout="this.style.background='#007bff'">
+                    🔄 View in NiiVue (Interactive 3D)
+                </a>
             </div>
         </div>
         """
@@ -1188,6 +1243,104 @@ def create_gif_index_html(subjects, output_dir, size="compact"):
     return index_file
 
 
+def launch_flask_server(subjects, port, output_dir):
+    """
+    Launch Flask server with the averaged PET files from QA preprocessing.
+
+    Args:
+        subjects: List of preprocessed subjects with averaged file paths
+        port: Port to run Flask server on
+        output_dir: Output directory containing temp_3d_images
+
+    Returns:
+        subprocess.Popen: Flask server process
+    """
+    import subprocess
+    import sys
+    import json
+    import tempfile
+
+    # Convert subjects to the format expected by serve.py
+    flask_subjects = []
+    for subject in subjects:
+        # Determine scan type from the original file path or basename
+        orig_basename = os.path.basename(subject["orig_path"])
+        scan_type = "pet"  # default
+
+        # Check if it's anatomical or defacemask
+        if "T1w" in orig_basename or "anat" in orig_basename:
+            scan_type = "anat"
+        elif "defacemask" in orig_basename:
+            scan_type = "defacemask"
+
+        flask_subjects.append(
+            {
+                "id": subject["id"],
+                "scan_type": scan_type,  # Add scan type to the subject object
+                "sessions": [
+                    {
+                        "label": "Original",
+                        "nifti_path": subject["orig_path"],  # Use actual file path
+                    },
+                    {
+                        "label": "Defaced",
+                        "nifti_path": subject["defaced_path"],  # Use actual file path
+                    },
+                ],
+            }
+        )
+
+    # Create a temporary JSON file with the subjects data
+    subjects_file = os.path.join(output_dir, "flask_subjects.json")
+    with open(subjects_file, "w") as f:
+        json.dump(flask_subjects, f, indent=2)
+
+    # Launch Flask server using serve.py
+    serve_script = os.path.join(os.path.dirname(__file__), "serve.py")
+
+    # Check if serve.py exists
+    if not os.path.exists(serve_script):
+        print(f"Warning: serve.py not found at {serve_script}")
+        print("Flask server will not be launched.")
+        return None
+
+    try:
+        # Launch Flask server in background
+        cmd = [
+            sys.executable,
+            serve_script,
+            "--subject-list",
+            subjects_file,
+            "--port",
+            str(port),
+        ]
+
+        # Start the Flask server process
+        process = subprocess.Popen(
+            cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+        )
+
+        # Give it a moment to start
+        import time
+
+        time.sleep(2)
+
+        # Check if process is still running
+        if process.poll() is None:
+            print(f"Flask server started successfully on port {port}")
+            return process
+        else:
+            stdout, stderr = process.communicate()
+            print(f"Failed to start Flask server:")
+            print(f"STDOUT: {stdout}")
+            print(f"STDERR: {stderr}")
+            return None
+
+    except Exception as e:
+        print(f"Error launching Flask server: {e}")
+        return None
+
+
 def run_qa(
     faced_dir,
     defaced_dir,
@@ -1196,6 +1349,8 @@ def run_qa(
     n_jobs=None,
     size="compact",
     open_browser=False,
+    flask_port=8000,
+    launch_flask=True,
 ):
     """
     Run QA report generation programmatically.
@@ -1269,6 +1424,7 @@ def run_qa(
             process_subject,
             output_dir=output_dir,
             size=size,
+            flask_port=flask_port,
         )
 
         # Process all subjects in parallel
@@ -1282,7 +1438,7 @@ def run_qa(
 
     # Create both HTML files
     side_by_side_file = create_side_by_side_index_html(
-        preprocessed_subjects, output_dir, size
+        preprocessed_subjects, output_dir, size, flask_port
     )
     animated_file = create_gif_index_html(preprocessed_subjects, output_dir, size)
 
@@ -1398,6 +1554,16 @@ def run_qa(
     print(f"\nAll files generated in: {output_dir}")
     print(f"Open index.html in your browser to view comparisons")
 
+    # Launch Flask server with averaged files if requested
+    flask_process = None
+    if launch_flask:
+        print(f"\nLaunching Flask NiiVue server on port {flask_port}...")
+        flask_process = launch_flask_server(
+            preprocessed_subjects, flask_port, output_dir
+        )
+        print(f"Flask server started at: http://localhost:{flask_port}")
+        print(f"NiiVue links in the QA report will now work!")
+
     return {
         "output_dir": output_dir,
         "side_by_side_file": side_by_side_file,
@@ -1406,6 +1572,7 @@ def run_qa(
         "command_file": command_file,
         "subjects_processed": len(successful),
         "total_subjects": len(preprocessed_subjects),
+        "flask_process": flask_process,
     }
 
 
@@ -1445,6 +1612,17 @@ def main():
         default="compact",
         help="Image size: 'compact' for closer together or 'full' for entire page width",
     )
+    parser.add_argument(
+        "--flask-port",
+        type=int,
+        default=8000,
+        help="Port for Flask NiiVue server (default: 8000)",
+    )
+    parser.add_argument(
+        "--no-flask",
+        action="store_true",
+        help="Do not launch Flask server (default: launches Flask server)",
+    )
     args = parser.parse_args()
 
     return run_qa(
@@ -1455,6 +1633,8 @@ def main():
         n_jobs=args.n_jobs,
         size=args.size,
         open_browser=args.open_browser,
+        flask_port=args.flask_port,
+        launch_flask=not args.no_flask,
     )
 
 

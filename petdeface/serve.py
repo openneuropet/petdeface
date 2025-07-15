@@ -60,28 +60,39 @@ def create_app(subjects):
         target_comparison = None
         for subject in subjects:
             if subject["id"] == subject_id:
-                # Find sessions for this scan type
-                sessions = []
-                for session in subject["sessions"]:
-                    path_parts = session["nifti_path"].split("/")
-                    current_scan_type = "unknown"
-                    if "anat" in path_parts:
-                        current_scan_type = "anat"
-                    elif "pet" in path_parts:
-                        current_scan_type = "pet"
-                    elif "defacemask" in path_parts:
-                        current_scan_type = "defacemask"
+                # Check if this subject has the requested scan type
+                if "scan_type" in subject and subject["scan_type"] == scan_type:
+                    # Use the sessions directly if scan type matches
+                    if len(subject["sessions"]) == 2:  # Original and Defaced
+                        target_comparison = {
+                            "subject_id": subject_id,
+                            "scan_type": scan_type,
+                            "sessions": subject["sessions"],
+                        }
+                        break
+                else:
+                    # Fallback to path-based detection for backward compatibility
+                    sessions = []
+                    for session in subject["sessions"]:
+                        path_parts = session["nifti_path"].split("/")
+                        current_scan_type = "unknown"
+                        if "anat" in path_parts:
+                            current_scan_type = "anat"
+                        elif "pet" in path_parts:
+                            current_scan_type = "pet"
+                        elif "defacemask" in path_parts:
+                            current_scan_type = "defacemask"
 
-                    if current_scan_type == scan_type:
-                        sessions.append(session)
+                        if current_scan_type == scan_type:
+                            sessions.append(session)
 
-                if len(sessions) == 2:  # Original and Defaced
-                    target_comparison = {
-                        "subject_id": subject_id,
-                        "scan_type": scan_type,
-                        "sessions": sessions,
-                    }
-                    break
+                    if len(sessions) == 2:  # Original and Defaced
+                        target_comparison = {
+                            "subject_id": subject_id,
+                            "scan_type": scan_type,
+                            "sessions": sessions,
+                        }
+                        break
 
         if not target_comparison:
             abort(404, description="Scan comparison not found")
@@ -237,19 +248,23 @@ def build_subjects_from_datasets(original_dir, defaced_dir):
     return subjects
 
 
-def run_server(subjects=None):
+def run_server(subjects=None, port=None):
     if subjects is None:
         subjects = sample_subjects
     app = create_app(subjects)
-    port = 8000
-    while True:
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            try:
-                s.bind(("127.0.0.1", port))
-                s.close()
-                break
-            except OSError:
-                port += 1
+
+    # If no port specified, find an available port
+    if port is None:
+        port = 8000
+        while True:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                try:
+                    s.bind(("127.0.0.1", port))
+                    s.close()
+                    break
+                except OSError:
+                    port += 1
+
     print(f"Serving on http://127.0.0.1:{port}")
     app.run(debug=True, port=port)
 
@@ -272,6 +287,12 @@ if __name__ == "__main__":
         "--defaced-dataset",
         type=str,
         help="Path to the defaced dataset directory (must be used with --original-dataset)",
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=8000,
+        help="Port to run the Flask server on (default: 8000)",
     )
     args = parser.parse_args()
 
@@ -303,4 +324,4 @@ if __name__ == "__main__":
         subjects = sample_subjects
 
     print(subjects)
-    run_server(subjects)
+    run_server(subjects, args.port)
