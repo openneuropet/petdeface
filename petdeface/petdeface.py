@@ -37,7 +37,7 @@ if is_script:
         sys.path.insert(0, str(current_dir))
 
     # Import using absolute imports (script mode)
-    from mideface import ApplyMideface, Mideface, TemplateFacemask
+    from mideface import ApplyMideface, Mideface
     from pet import WeightedAverage
     from qa import run_qa
     from utils import run_validator
@@ -443,15 +443,13 @@ def init_single_subject_wf(
 
         if is_template_from_pet:
             # For PET-averaged templates, we need to create a facemask without defacing the template
-            # We'll use TemplateFacemask to generate the facemask without defacing the template
-            from mideface import TemplateFacemask
+            # We'll use Mideface to generate the facemask but not apply it to the template
 
             # Create a node that generates facemask but doesn't deface the template
             template_facemask = Node(
-                TemplateFacemask(
+                Mideface(
                     in_file=pathlib.Path(t1w_file),
-                    no_pics=True,  # No preview pics for templates
-                    no_post=True,  # No post-processing for templates
+                    pics=False,  # No preview pics for templates
                     odir=".",
                     code=f"{anat_string}_template",
                 ),
@@ -532,9 +530,10 @@ def init_single_subject_wf(
             if ses_id.replace("ses-", "") in sessions_to_exclude:
                 continue
 
-            # collect tracer
+            # collect tracer for filename only
+            tracer_info = ""
             if re.search("trc-[^_|\/]*", str(pet_file)):
-                pet_string += "_" + re.search("trc-[^_|\/]*", str(pet_file)).group(0)
+                tracer_info = "_" + re.search("trc-[^_|\/]*", str(pet_file)).group(0)
 
             # collect recontstruction
             if re.search("rec-[^_|\/]*", str(pet_file)):
@@ -545,7 +544,8 @@ def init_single_subject_wf(
                 run_id = "_" + re.search("run-[^_|\/]*", str(pet_file)).group(0)
             except AttributeError:
                 run_id = ""
-            pet_wf_name = f"pet_{pet_string}{run_id}_wf"
+            # Create workflow name with tracer for uniqueness
+            pet_wf_name = f"pet_{pet_string}{tracer_info}{run_id}_wf"
             pet_wf = Workflow(name=pet_wf_name)
 
             weighted_average = Node(
@@ -558,7 +558,9 @@ def init_single_subject_wf(
             if use_template_anat:
                 mricoreg.inputs.dof = 12
 
-            mricoreg.inputs.out_lta_file = f"{pet_string}{run_id}_desc-pet2anat_pet.lta"
+            mricoreg.inputs.out_lta_file = (
+                f"{pet_string}{tracer_info}{run_id}_desc-pet2anat_pet.lta"
+            )
 
             coreg_pet_to_t1w = Node(mricoreg, "coreg_pet_to_t1w")
 
@@ -753,6 +755,9 @@ def wrap_up_defacing(
             final_destination = output_dir
 
         # copy original dataset to new location, respecting exclusions
+        # Use a set to track copied files to avoid duplicates
+        copied_files = set()
+
         for entry in raw_only.files:
             # Check if this file belongs to an excluded subject
             should_exclude = False
@@ -773,12 +778,21 @@ def wrap_up_defacing(
             if should_exclude:
                 continue
 
+            # Create the destination path
             copy_path = entry.replace(str(path_to_dataset), str(final_destination))
+
+            # Check if we've already copied a file with the same basename
+            # This prevents duplicates like trc-sf51/pet/file.nii.gz and pet/file.nii.gz
+            basename = os.path.basename(entry)
+            if basename in copied_files:
+                continue
+
             pathlib.Path(copy_path).parent.mkdir(
                 parents=True, exist_ok=True, mode=0o775
             )
             if entry != copy_path:
                 shutil.copy(entry, copy_path)
+                copied_files.add(basename)
 
         # update paths in mapping dict
         move_defaced_images(mapping_dict, final_destination)
