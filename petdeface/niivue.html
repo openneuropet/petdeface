@@ -2,117 +2,94 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>NiiVue</title>
+    <title>NiiVue - Scan Comparisons</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 0;
+        padding: 20px;
+        background-color: #f0f0f0;
+      }
+      .header {
+        text-align: center;
+        margin-bottom: 40px;
+      }
+      .title {
+        font-size: 3em;
+        font-weight: bold;
+        color: #333;
+        margin-bottom: 10px;
+      }
+      .subtitle {
+        font-size: 1.2em;
+        color: #666;
+      }
+      .comparisons-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+        gap: 20px;
+        max-width: 1200px;
+        margin: 0 auto;
+      }
+      .comparison-card {
+        background: white;
+        padding: 20px;
+        border-radius: 10px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        text-align: center;
+        transition: transform 0.2s;
+      }
+      .comparison-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+      }
+      .subject-id {
+        font-size: 1.5em;
+        font-weight: bold;
+        color: #333;
+        margin-bottom: 10px;
+      }
+      .scan-type {
+        font-size: 1.2em;
+        color: #007bff;
+        font-weight: bold;
+        margin-bottom: 10px;
+        text-transform: uppercase;
+      }
+      .session-count {
+        color: #666;
+        margin-bottom: 20px;
+      }
+      .view-btn {
+        display: inline-block;
+        padding: 10px 20px;
+        background-color: #007bff;
+        color: white;
+        text-decoration: none;
+        border-radius: 5px;
+        font-weight: bold;
+        transition: background-color 0.2s;
+      }
+      .view-btn:hover {
+        background-color: #0056b3;
+      }
+    </style>
   </head>
   <body>
-    {% for subject in subjects %}
-      <div style="text-align: center; font-weight: bold; font-size: 2em; margin: 40px 0 20px 0;">
-        {{ subject.id }}
-      </div>
-      <div style="display: flex; gap: 20px; justify-content: center;">
-        {% for session in subject.sessions %}
-          <div style="display: flex; flex-direction: column; align-items: center; position: relative; width: 640px;">
-            <div style="font-size: 1.5em; font-weight: bold; margin-bottom: 12px; color: white; text-shadow: -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000, 2px 2px 0 #000; text-align: center;">
-              {{ session.label }}<br>
-              <span style="font-size: 0.8em; font-weight: normal; color: white; text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000;">
-                {{ session.nifti_path.replace('/file', '') if session.nifti_path.startswith('/file') else session.nifti_path }}
-              </span>
-            </div>
-            <canvas id="gl_{{ subject.id }}_{{ session.label }}" width="640" height="640"></canvas>
-            <div style="position: absolute; top: 0; left: 0; width: 640px; height: 640px; z-index: 10; pointer-events: all;"></div>
-          </div>
-        {% endfor %}
-      </div>
-      <div style="margin-top: 20px; text-align: center;">
-        <label for="rotationSlider_{{ subject.id }}">Rotate: </label>
-        <input type="range" id="rotationSlider_{{ subject.id }}" min="0" max="36000" value="0" style="width: 300px;">
-        <span id="rotationValue_{{ subject.id }}">0</span>
-        <button id="resetView_{{ subject.id }}">Reset View</button>
-      </div>
-    {% endfor %}
+    <div class="header">
+      <div class="title">NiiVue Viewer</div>
+      <div class="subtitle">Select a scan comparison to view</div>
+    </div>
+    
+    <div class="comparisons-grid">
+      {% for comparison in scan_comparisons %}
+        <div class="comparison-card">
+          <div class="subject-id">{{ comparison.subject_id }}</div>
+          <div class="scan-type">{{ comparison.scan_type.upper() }}</div>
+          <div class="session-count">Original vs Defaced</div>
+          <a href="/scan/{{ comparison.subject_id }}/{{ comparison.scan_type }}" class="view-btn">View Comparison</a>
+        </div>
+      {% endfor %}
+    </div>
   </body>
-  {% set viewer_configs = [] %}
-  {% for subject in subjects %}
-    {% for session in subject.sessions %}
-      {% set _ = viewer_configs.append({'canvasId': 'gl_' ~ subject.id ~ '_' ~ session.label, 'niftiPath': session.nifti_path}) %}
-    {% endfor %}
-  {% endfor %}
-  <script type="module" async>
-    import { Niivue } from "https://unpkg.com/@niivue/niivue@0.57.0/dist/index.js"
-    const viewerConfigs = {{ viewer_configs | tojson }};
-    const subjectViewers = {};
-    for (const cfg of viewerConfigs) {
-      // Extract subject id from canvasId (assumes format gl_subjectid_label)
-      const match = cfg.canvasId.match(/^gl_(.+?)_/);
-      if (match) {
-        const subjectId = match[1];
-        if (!subjectViewers[subjectId]) subjectViewers[subjectId] = [];
-        subjectViewers[subjectId].push(cfg);
-      }
-    }
-    async function setupViewers() {
-      for (const cfg of viewerConfigs) {
-        const nv = new Niivue({ isResizeCanvas: false });
-        await nv.attachTo(cfg.canvasId);
-        nv.setSliceType(nv.sliceTypeRender);
-        nv.dragMode = "none";
-        nv.opts.pointerInteraction = false;
-        nv.opts.isMouseWheel = false;
-        nv.opts.isColorbar = false;
-        nv.opts.isResizeCanvas = false;
-        nv.opts.isDrag = false;
-        await nv.loadVolumes([{ url: cfg.niftiPath }]);
-        // Remove all mouse and pointer event listeners
-        nv.canvas.onwheel = null;
-        nv.canvas.onmousedown = null;
-        nv.canvas.onmousemove = null;
-        nv.canvas.onmouseup = null;
-        nv.canvas.onclick = null;
-        nv.canvas.ondblclick = null;
-        nv.canvas.oncontextmenu = null;
-        nv.canvas.onpointerdown = null;
-        nv.canvas.onpointermove = null;
-        nv.canvas.onpointerup = null;
-        nv.canvas.onpointerleave = null;
-        nv.canvas.onpointerenter = null;
-        nv.canvas.onpointercancel = null;
-        nv.canvas.onmouseenter = null;
-        nv.canvas.onmouseleave = null;
-        nv.canvas.onmouseout = null;
-        nv.canvas.onmouseover = null;
-        cfg.nv = nv;
-      }
-    }
-    setupViewers().then(() => {
-      // Set up per-subject sliders
-      Object.keys(subjectViewers).forEach(subjectId => {
-        const slider = document.getElementById(`rotationSlider_${subjectId}`);
-        const valueSpan = document.getElementById(`rotationValue_${subjectId}`);
-        slider.addEventListener('input', () => {
-          const deg = parseFloat(slider.value);
-          valueSpan.textContent = deg;
-          const rad = deg * Math.PI / 180;
-          subjectViewers[subjectId].forEach(cfg => {
-            cfg.nv.scene.renderAzimuth = rad;
-            cfg.nv.drawScene();
-          });
-        });
-        const resetBtn = document.getElementById(`resetView_${subjectId}`);
-        resetBtn.addEventListener('click', () => {
-          // Reset slider
-          slider.value = 0;
-          valueSpan.textContent = 0;
-          // Reset each viewer for this subject
-          subjectViewers[subjectId].forEach(cfg => {
-            cfg.nv.scene.renderAzimuth = 0;
-            cfg.nv.scene.renderElevation = 0;
-            cfg.nv.scene.volScaleMultiplier = 1;
-            cfg.nv.scene.pan2Dxyz = [0.5, 0.5, 0.5];
-            cfg.nv.setSliceType(cfg.nv.sliceTypeRender);
-            cfg.nv.drawScene();
-          });
-        });
-      });
-    });
-  </script>
 </html>

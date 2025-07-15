@@ -12,26 +12,89 @@ def create_app(subjects):
 
     @app.route("/")
     def index():
-        # Prefix all nifti_paths with /file/ for the new file serving route
-        modified_subjects = []
+        # Create a list of all scan comparisons
+        scan_comparisons = []
         for subject in subjects:
-            modified_subject = subject.copy()
-            modified_subject["sessions"] = []
+            # Group sessions by scan type (anat, pet, defacemask)
+            scan_groups = {}
             for session in subject["sessions"]:
-                modified_session = session.copy()
-                # Convert filesystem path to URL path
-                if modified_session["nifti_path"].startswith("/"):
-                    # Absolute path - prefix with /file/
-                    modified_session["nifti_path"] = (
-                        f"/file{modified_session['nifti_path']}"
-                    )
-                else:
-                    # Relative path - keep as is for backward compatibility
-                    pass
-                modified_subject["sessions"].append(modified_session)
-            modified_subjects.append(modified_subject)
+                # Extract scan type from path
+                path_parts = session["nifti_path"].split("/")
+                scan_type = "unknown"
+                if "anat" in path_parts:
+                    scan_type = "anat"
+                elif "pet" in path_parts:
+                    scan_type = "pet"
+                elif "defacemask" in path_parts:
+                    scan_type = "defacemask"
 
-        return render_template("niivue.html", subjects=modified_subjects)
+                if scan_type not in scan_groups:
+                    scan_groups[scan_type] = []
+                scan_groups[scan_type].append(session)
+
+            # Create a comparison for each scan type
+            for scan_type, sessions in scan_groups.items():
+                if len(sessions) == 2:  # Original and Defaced
+                    comparison = {
+                        "subject_id": subject["id"],
+                        "scan_type": scan_type,
+                        "sessions": sessions,
+                    }
+                    scan_comparisons.append(comparison)
+
+        # Prefix all nifti_paths with /file/ (only if not already prefixed)
+        for comparison in scan_comparisons:
+            for session in comparison["sessions"]:
+                # Remove any existing /file/ prefix first, then add it back
+                if session["nifti_path"].startswith("/file/"):
+                    session["nifti_path"] = session["nifti_path"][6:]  # Remove /file/
+                if session["nifti_path"].startswith("/"):
+                    session["nifti_path"] = f"/file{session['nifti_path']}"
+
+        return render_template("niivue.html", scan_comparisons=scan_comparisons)
+
+    @app.route("/scan/<subject_id>/<scan_type>")
+    def scan_page(subject_id, scan_type):
+        """Serve a single scan comparison page"""
+        # Find the specific scan comparison
+        target_comparison = None
+        for subject in subjects:
+            if subject["id"] == subject_id:
+                # Find sessions for this scan type
+                sessions = []
+                for session in subject["sessions"]:
+                    path_parts = session["nifti_path"].split("/")
+                    current_scan_type = "unknown"
+                    if "anat" in path_parts:
+                        current_scan_type = "anat"
+                    elif "pet" in path_parts:
+                        current_scan_type = "pet"
+                    elif "defacemask" in path_parts:
+                        current_scan_type = "defacemask"
+
+                    if current_scan_type == scan_type:
+                        sessions.append(session)
+
+                if len(sessions) == 2:  # Original and Defaced
+                    target_comparison = {
+                        "subject_id": subject_id,
+                        "scan_type": scan_type,
+                        "sessions": sessions,
+                    }
+                    break
+
+        if not target_comparison:
+            abort(404, description="Scan comparison not found")
+
+        # Prefix nifti_paths with /file/ (only if not already prefixed)
+        for session in target_comparison["sessions"]:
+            # Remove any existing /file/ prefix first, then add it back
+            if session["nifti_path"].startswith("/file/"):
+                session["nifti_path"] = session["nifti_path"][6:]  # Remove /file/
+            if session["nifti_path"].startswith("/"):
+                session["nifti_path"] = f"/file{session['nifti_path']}"
+
+        return render_template("scan.html", comparison=target_comparison)
 
     # Serve static files (NIfTI, etc.) from the project root
     @app.route("/<path:filename>")
