@@ -80,8 +80,6 @@ def create_app(subjects):
                             current_scan_type = "anat"
                         elif "pet" in path_parts:
                             current_scan_type = "pet"
-                        elif "defacemask" in path_parts:
-                            current_scan_type = "defacemask"
 
                         if current_scan_type == scan_type:
                             sessions.append(session)
@@ -229,15 +227,11 @@ def build_subjects_from_datasets(original_dir, defaced_dir):
                 "sessions": [
                     {
                         "label": "Original",
-                        "nifti_path": orig_path,  # os.path.relpath(
-                        # orig_path, os.path.dirname(__file__)
-                        # ),
+                        "nifti_path": orig_path,
                     },
                     {
                         "label": "Defaced",
-                        "nifti_path": defaced_path,  # os.path.relpath(
-                        # defaced_path, os.path.dirname(__file__)
-                        # ),
+                        "nifti_path": defaced_path,
                     },
                 ],
             }

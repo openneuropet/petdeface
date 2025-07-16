@@ -1,5 +1,6 @@
 import argparse
 import os
+import re
 import tempfile
 import shutil
 from glob import glob
@@ -16,7 +17,9 @@ import multiprocessing as mp
 from functools import partial
 import seaborn as sns
 from PIL import Image, ImageDraw
+from petutils.petutils import collect_anat_and_pet
 from nipype import Workflow, Node
+from nipype.interfaces.freesurfer import ApplyVolTransform
 from nireports.interfaces.reporting.base import SimpleBeforeAfterRPT
 from tempfile import TemporaryDirectory
 from pathlib import Path
@@ -70,6 +73,7 @@ def preprocess_single_subject(s, output_dir):
         "defaced_path": defaced_3d_path,  # Update to 3D path
         "orig_img": orig_img,  # Keep loaded image for direct use
         "defaced_img": defaced_img,  # Keep loaded image for direct use
+        "registration_file": s.get("registration_file"),
     }
 
     print(f"  Preprocessed {s['id']}")
@@ -101,51 +105,130 @@ def preprocess_images(subjects: dict, output_dir, n_jobs=None):
     return preprocessed_subjects
 
 
+def _extract_bids_parts(orig_path, subject_id):
+    """Extract subject and session parts from BIDS path."""
+    path_parts = orig_path.split(os.sep)
+    subject_part = next((p for p in path_parts if p.startswith("sub-")), subject_id)
+    session_part = next((p for p in path_parts if p.startswith("ses-")), "")
+    return subject_part, session_part
+
+
+def _create_valid_node_name(prefix, subject_part, session_part):
+    """Create a valid node name from BIDS parts."""
+    if session_part:
+        return f"{prefix}_{subject_part}_{session_part}".replace("-", "_")
+    else:
+        return f"{prefix}_{subject_part}".replace("-", "_")
+
+
 def generate_simple_before_and_after(preprocessed_subjects: dict, output_dir):
     if not output_dir:
         output_dir = TemporaryDirectory()
-    wf = Workflow(
-        name="simple_before_after_report", base_dir=Path(output_dir) / "images/"
-    )
+        # Create a unique workflow name to avoid conflicts
+    workflow_name = f"simple_before_after_report"
 
-    # Create a list to store all nodes
-    nodes = []
+    wf = Workflow(name=workflow_name, base_dir=Path(output_dir) / "images/")
+
+    # Create a list to store nodes that need to be added manually (not connected)
+    unconnected_nodes = []
+    # node_counter = 0  # Add counter to ensure unique names
+    # seen_hashes = set()  # Track which hashes we've already processed
 
     for s in preprocessed_subjects:
-        # only run this on the T1w images for now
-        if "T1w" in s["orig_path"]:
-            o_path = Path(s["orig_path"])
-            # Create a valid node name by replacing invalid characters but preserving session info
-            # Use the full path to ensure uniqueness
-            path_parts = s["orig_path"].split(os.sep)
-            subject_part = next(
-                (p for p in path_parts if p.startswith("sub-")), s["id"]
-            )
-            session_part = next((p for p in path_parts if p.startswith("ses-")), "")
+        # Extract BIDS parts once for reuse
+        subject_part, session_part = _extract_bids_parts(s["orig_path"], s["id"])
 
-            if session_part:
-                valid_name = f"before_after_{subject_part}_{session_part}".replace(
-                    "-", "_"
+        # Create a unique identifier using subject ID and counter
+        # unique_id = f"{s['id']}_{node_counter}"
+
+        # Skip if we've already processed this exact file pair
+        # file_pair = (s["orig_path"], s["defaced_path"])
+        # if file_pair in seen_hashes:
+        #    print(
+        #        f"Skipping duplicate file pair: {s['orig_path']} -> {s['defaced_path']}"
+        #    )
+        #    continue
+        # seen_hashes.add(file_pair)
+
+        # print(
+        #    f"Processing file pair {node_counter}: {s['orig_path']} -> {s['defaced_path']}"
+        # )
+
+        if "pet" in s["orig_path"] and s.get("target_image"):
+            print(f"Processing PET file: {s['orig_path']}")
+            print(f"Target image: {s.get('target_image')}")
+
+            # Transform PET image to target space (regardless of target type)
+            # Transform PET image to T1w space
+            transform_orig_node = Node(
+                ApplyVolTransform(
+                    source_file=s["orig_path"],
+                    reg_file=s["registration_file"],
+                    target_file=s["target_image"],
+                ),
+                name=f"transform_pet_orig_{subject_part}_{session_part}",
+            )
+
+            transform_defaced_node = Node(
+                ApplyVolTransform(
+                    source_file=s["defaced_path"],
+                    reg_file=s["registration_file"],
+                    target_file=s["target_image"],
+                ),
+                name=f"transform_pet_defaced_{subject_part}_{session_part}",
+            )
+
+            # Create SimpleBeforeAfterRPT node for transformed PET
+            report_node = Node(
+                SimpleBeforeAfterRPT(
+                    before_label="Original PET",
+                    after_label="Defaced PET",
+                    out_report=f"{s['id']}_pet_simple_before_after.svg",
+                ),
+                name=f"before_after_pet_{subject_part}_{session_part}",
+            )
+
+            # Connect the nodes properly (this automatically adds them to workflow)
+            wf.connect(transform_orig_node, "transformed_file", report_node, "before")
+            wf.connect(transform_defaced_node, "transformed_file", report_node, "after")
+
+            # Add overlay report if target is T1w
+            if "t1w" in s.get("target_image", "").lower():
+                overlay_node = Node(
+                    SimpleBeforeAfterRPT(
+                        before=s["target_image"],
+                        after=s["defaced_path"],
+                        before_label="T1w",
+                        after_label="Defaced PET",
+                        out_report=f"{s['id']}_PET_T1W_registration.svg",
+                    ),
+                    name=f"PET_Registration_to_T1w_{subject_part}_{session_part}",
                 )
-            else:
-                valid_name = f"before_after_{subject_part}".replace("-", "_")
+                # This node isn't connected, so add it manually
+                unconnected_nodes.append(overlay_node)
+
+        # run t1ws too
+        if "t1w" in s["orig_path"].lower():
             node = Node(
                 SimpleBeforeAfterRPT(
                     before=s["orig_path"],
                     after=s["defaced_path"],
                     before_label="Original",
                     after_label="Defaced",
-                    out_report=f"{s['id']}_simple_before_after.svg",
+                    out_report=f"{s['id']}_T1w_simple_before_after.svg",
                 ),
-                name=valid_name,
+                name=f"before_after_T1w_{subject_part}_{session_part}",
             )
-            nodes.append(node)
+            # This node isn't connected, so add it manually
+            unconnected_nodes.append(node)
+            # node_counter += 1
 
-            # Add all nodes to the workflow
-    wf.add_nodes(nodes)
+            # Add unconnected nodes to workflow
+    if unconnected_nodes:
+        wf.add_nodes(unconnected_nodes)
 
     # Only run if we have nodes to process
-    if nodes:
+    if unconnected_nodes or list(wf.list_node_names()):
         wf.run(plugin="MultiProc", plugin_args={"n_procs": mp.cpu_count()})
         # Collect SVG files and move them to images folder
         collect_svg_reports(wf, output_dir)
@@ -820,6 +903,17 @@ def build_subjects_from_datasets(orig_dir, defaced_dir):
     orig_files = get_nifti_files(orig_dir)
     defaced_files = get_nifti_files(defaced_dir)
 
+    # collect the registration files for the defaced dataset
+    def get_registration_files(directory):
+        filtered_files = []
+        reg_files = glob(os.path.join(directory, "**", "*.lta"), recursive=True)
+        for reg in reg_files:
+            if ("petdeface_wf" or "single_subject_") not in reg:
+                filtered_files.append(reg)
+        return filtered_files
+
+    registration_files_defaced_dir = get_registration_files(defaced_dir)
+
     def strip_ext(path):
         base = os.path.basename(path)
         if base.endswith(".gz"):
@@ -860,11 +954,24 @@ def build_subjects_from_datasets(orig_dir, defaced_dir):
         else:
             subject_id = sub_id
 
+        registration_paths = [
+            reg_file
+            for reg_file in registration_files_defaced_dir
+            if subject_id in reg_file
+        ]
+
+        # just take the first one as there "should" only be one match
+        if len(registration_paths) > 0:
+            registration_path = registration_paths[0]
+        else:
+            registration_path = ""
+
         subjects.append(
             {
                 "id": subject_id,
                 "orig_path": orig_path,
                 "defaced_path": defaced_path,
+                "registration_file": registration_path,
             }
         )
 
@@ -1351,6 +1458,7 @@ def run_qa(
     open_browser=False,
     flask_port=8000,
     launch_flask=True,
+    defacing_method="default",
 ):
     """
     Run QA report generation programmatically.
@@ -1410,6 +1518,47 @@ def run_qa(
 
     # Preprocess all images once (4D→3D conversion)
     preprocessed_subjects = preprocess_images(subjects, output_dir, n_jobs)
+
+    # Depending on the defacing method we have several different ways to perform the registration of
+    # the pet images to the defaced "space". Aka if the method is "pet" we're going to want to
+    # use the 3D image we created in preprocessed subjects
+    if defacing_method == "pet":
+        for i, subject in enumerate(preprocessed_subjects):
+            preprocessed_subjects[i]["target_image"] = subject["defaced_path"]
+    elif defacing_method == "t1":
+        # Hardcode path relative to qa.py location
+        qa_dir = os.path.dirname(os.path.abspath(__file__))
+        target_image_path = os.path.join(
+            qa_dir,
+            "..",
+            "data",
+            "sub-01",
+            "ses-baseline",
+            "anat",
+            "sub-01_ses-baseline_T1w.nii",
+        )
+        subject["target_image"] = target_image_path
+    elif defacing_method == "mni":
+        # TODO add path to MNI image
+        pass
+    elif defacing_method == "default":
+        # just go ahead and collect the original T1w path from the faced directory
+        matching_dictionary = collect_anat_and_pet(Path(faced_dir))
+        # attempt to lookup the original image used for defacing
+        for i, preproccessed in enumerate(preprocessed_subjects):
+            sub_id_match = re.match(r"sub-([a-zA-Z0-9]+)", preproccessed["id"])
+            if sub_id_match:
+                sub_id = sub_id_match.group(1)
+                # Look up the subject in the matching dictionary
+                if sub_id in matching_dictionary:
+                    # Get the first anatomical image for this subject
+                    subject_data = matching_dictionary.get(sub_id)
+                    if subject_data:
+                        # Take the first T1w image (values are T1w files)
+                        first_t1w = next(iter(subject_data.values()))
+                        preprocessed_subjects[i]["target_image"] = first_t1w
+                    else:
+                        preprocessed_subjects[i]["target_image"] = None
 
     # create nireports svg's for comparison
     generate_simple_before_and_after(
@@ -1526,7 +1675,7 @@ def run_qa(
     ]
     if n_jobs:
         command_parts.extend(["--n-jobs", str(n_jobs)])
-    if subject:
+    if subject and type(subject) is str:
         command_parts.extend(["--subject", subject])
     if open_browser:
         command_parts.append("--open-browser")
@@ -1623,6 +1772,12 @@ def main():
         action="store_true",
         help="Do not launch Flask server (default: launches Flask server)",
     )
+    parser.add_argument(
+        "--defacing-method",
+        choices=["mni", "t1", "pet", "default"],
+        default="default",
+        help="Method used for defacing, this is important as it provides context to the QA to check on the registration of this pipeline",
+    )
     args = parser.parse_args()
 
     return run_qa(
@@ -1635,6 +1790,7 @@ def main():
         open_browser=args.open_browser,
         flask_port=args.flask_port,
         launch_flask=not args.no_flask,
+        defacing_method=args.defacing_method,
     )
 
 

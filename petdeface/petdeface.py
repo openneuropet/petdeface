@@ -1293,6 +1293,7 @@ def main():  # noqa: max-complexity: 12
                     " ".join(args.participant_label) if args.participant_label else None
                 ),
                 open_browser=args.open_browser,
+                defacing_method="default"
             )
 
             print("\n" + "=" * 60)

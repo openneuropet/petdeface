@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>PET Deface Comparison Viewer</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            color: #333;
+        }
+        .comparison-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(800px, 1fr));
+            gap: 30px;
+            max-width: 1600px;
+            margin: 0 auto;
+        }
+        .comparison-item {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+        .comparison-header {
+            background: #2c3e50;
+            color: white;
+            padding: 15px 20px;
+            font-size: 18px;
+            font-weight: bold;
+        }
+        .viewer-container {
+            display: flex;
+            height: 600px;
+        }
+        .viewer-frame {
+            flex: 1;
+            border: none;
+            background: white;
+        }
+        .viewer-label {
+            background: #34495e;
+            color: white;
+            padding: 10px;
+            text-align: center;
+            font-weight: bold;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>PET Deface Comparison Viewer</h1>
+        <p>Compare original and defaced neuroimaging data</p>
+    </div>
+
+    <div class="comparison-grid">
+        {% for subject in subjects %}
+            {% for session in subject.sessions %}
+                {% if session.label == "Original" %}
+                    {% set original_session = session %}
+                    {% set defaced_session = subject.sessions | selectattr("label", "equalto", "Defaced") | first %}
+                    {% if defaced_session %}
+                        <div class="comparison-item">
+                            <div class="comparison-header">
+                                {{ subject.id }} - {{ session.label }} vs Defaced
+                            </div>
+                            <div class="viewer-container">
+                                <div style="flex: 1; display: flex; flex-direction: column;">
+                                    <div class="viewer-label">Original</div>
+                                    <iframe 
+                                        class="viewer-frame" 
+                                        src="/viewer?nifti_url={{ original_session.nifti_url }}"
+                                        title="Original {{ subject.id }}"
+                                    ></iframe>
+                                </div>
+                                <div style="flex: 1; display: flex; flex-direction: column;">
+                                    <div class="viewer-label">Defaced</div>
+                                    <iframe 
+                                        class="viewer-frame" 
+                                        src="/viewer?nifti_url={{ defaced_session.nifti_url }}"
+                                        title="Defaced {{ subject.id }}"
+                                    ></iframe>
+                                </div>
+                            </div>
+                        </div>
+                    {% endif %}
+                {% endif %}
+            {% endfor %}
+        {% endfor %}
+    </div>
+</body>
+</html>
