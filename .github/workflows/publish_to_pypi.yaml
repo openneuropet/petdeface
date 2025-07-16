@@ -1,0 +1,36 @@
+name: Publish to PyPI
+
+on:
+  push:
+    tags:
+      - '**'
+env:
+  PYPI_TOKEN: ${{ secrets.PYPI_TOKEN_PETDEFACE }}
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.11
+          cache: 'poetry'
+
+      - name: Install dependencies
+        run: |
+          pipx install poetry
+          poetry install
+
+      - name: Build
+        run: |
+          poetry build
+
+      - name: Publish
+        if: '!contains(github.ref_name, "test")'
+        run: |
+          echo "Publishing to PyPI..."
+          poetry config pypi-token.pypi $PYPI_TOKEN
+          poetry publish
