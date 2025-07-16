@@ -3,6 +3,7 @@ from pathlib import Path
 import shutil
 import bids
 from petdeface.petdeface import PetDeface
+from petdeface.utils import InvalidBIDSDataset
 from os import cpu_count
 from bids.layout import BIDSLayout
 import subprocess
@@ -34,6 +35,7 @@ def test_anat_in_first_session_folder():
             / "derivatives"
             / "petdeface",
             n_procs=nthreads,
+            preview_pics=False,
         )
         petdeface.run()
 
@@ -80,6 +82,7 @@ def test_anat_in_each_session_folder():
             / "derivatives"
             / "petdeface",
             n_procs=nthreads,
+            preview_pics=False,
         )
         petdeface.run()
 
@@ -117,5 +120,54 @@ def test_anat_in_subject_folder():
             / "derivatives"
             / "petdeface",
             n_procs=nthreads,
+            preview_pics=False,
         )
         petdeface.run()
+
+def test_no_anat():
+    # create a temporary directory to copy the existing dataset into
+    with tempfile.TemporaryDirectory() as tmpdir:
+        shutil.copytree(data_dir, Path(tmpdir) / "no_anat")
+
+        subject_folder = Path(tmpdir) / "no_anat" / "sub-01"
+        # next we delete the anat fold in the subject folder
+        shutil.rmtree(subject_folder / "ses-baseline" / "anat")
+
+        # run petdeface on the copied dataset
+        petdeface = PetDeface(
+            Path(tmpdir) / "no_anat",
+            output_dir=Path(tmpdir)
+            / "no_anat_defaced"
+            / "derivatives"
+            / "petdeface",
+            n_procs=nthreads,
+        )
+    
+        # now we want to assert that this pipeline crashes and print the error
+        with pytest.raises(FileNotFoundError) as exc_info:
+            petdeface.run()
+
+def test_invalid_bids():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        shutil.copytree(data_dir, Path(tmpdir) / "invalid")
+        # rename the files in the pet folder to a different subject id
+        subject_folder = Path(tmpdir) / "invalid" / "sub-01"
+        pet_folder = subject_folder / "ses-baseline" / "pet"
+        for file in pet_folder.glob("sub-01_*"):
+            shutil.move(
+                file,
+                pet_folder / file.name.replace("sub-01", "sub-01-bestsubject")
+            )
+            
+        # run petdeface on the invalid dataset
+        petdeface = PetDeface(
+            Path(tmpdir) / "invalid",
+            output_dir=Path(tmpdir) / "invalid_defaced" / "derivatives" / "petdeface",
+            n_procs=nthreads,
+        )
+        
+        # Run it and see what error gets raised
+        with pytest.raises(InvalidBIDSDataset) as exc_info:
+            petdeface.run()
+        assert "Dataset at" in str(exc_info.value)
+        

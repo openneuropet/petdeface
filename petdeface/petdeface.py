@@ -31,10 +31,12 @@ try:
     from mideface import ApplyMideface
     from mideface import Mideface
     from pet import WeightedAverage
+    from utils import run_validator
 except ModuleNotFoundError:
     from .mideface import ApplyMideface
     from .mideface import Mideface
     from .pet import WeightedAverage
+    from .utils import run_validator
 
 
 # collect version from pyproject.toml
@@ -207,6 +209,10 @@ def deface(args: Union[dict, argparse.Namespace]) -> None:
     else:
         args = args
 
+    # first check to see if the dataset is bids valid
+    if not args.skip_bids_validator:
+        run_validator(args.bids_dir)
+
     if not check_valid_fs_license() and not locate_freesurfer_license().exists():
         raise Exception("You need a valid FreeSurfer license to proceed!")
 
@@ -255,6 +261,8 @@ def deface(args: Union[dict, argparse.Namespace]) -> None:
 
     petdeface_wf = Workflow(name="petdeface_wf", base_dir=output_dir)
 
+    missing_file_errors = []
+
     for subject_id in subjects:
         try:
             single_subject_wf = init_single_subject_wf(
@@ -265,11 +273,19 @@ def deface(args: Union[dict, argparse.Namespace]) -> None:
                 session_label=args.session_label,
                 session_label_exclude=args.session_label_exclude,
             )
-        except FileNotFoundError:
+        except FileNotFoundError as error:
             single_subject_wf = None
-
+            missing_file_errors.append(str(error))
         if single_subject_wf:
             petdeface_wf.add_nodes([single_subject_wf])
+
+    if (
+        missing_file_errors
+    ):  # todo add conditional later for cases where a template t1w is used
+        raise FileNotFoundError(
+            "The following subjects are missing t1w images:\n"
+            + "\n".join(missing_file_errors)
+        )
 
     try:
         petdeface_wf.write_graph("petdeface.dot", graph2use="colored", simple_form=True)
@@ -748,7 +764,7 @@ class PetDeface:
         anat_only=False,
         subject="",
         n_procs=2,
-        skip_bids_validator=True,
+        skip_bids_validator=False,
         remove_existing=True,
         placement="adjacent",
         preview_pics=True,
