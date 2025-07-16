@@ -29,7 +29,7 @@ jobs:
           poetry build
 
       - name: Publish
-        if: '!contains(github.ref_name, "test")'
+        if: ${{ !contains(github.ref_name, 'test') }}
         run: |
           echo "Publishing to PyPI..."
           poetry config pypi-token.pypi $PYPI_TOKEN
