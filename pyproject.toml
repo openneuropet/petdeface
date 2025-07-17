@@ -63,4 +63,7 @@ requires = ["setuptools>=68.1.2", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-package-data = { "petdeface" = ["data/**/*T1w.nii", "data/**/*T1w.nii.gz", "data/**/*T1w.json"] }
+packages = ["petdeface"]
+include-package-data = false
+package-data = { "petdeface" = ["data/sub-01/**/*T1w.nii", "data/sub-01/**/*T1w.nii.gz", "data/sub-01/**/*T1w.json", "data/sub-mni305/**/*T1w.nii", "data/sub-mni305/**/*T1w.nii.gz", "data/sub-mni305/**/*T1w.json"] }
+exclude-package-data = { "petdeface" = ["data/sub-02/**/*"] }
