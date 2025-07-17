@@ -136,16 +136,9 @@ def test_participant_exclusion():
     """Test that participant exclusion works correctly by excluding sub-02"""
     with tempfile.TemporaryDirectory() as temp_dir:
         test_dir = Path(temp_dir)
-        print(f"DEBUG: Test temp directory: {test_dir}")
 
         # Create the test directory and copy our data
         shutil.copytree(data_dir, test_dir / "participant_exclusion")
-
-        # Set FreeSurfer environment variables
-        import os
-
-        os.environ["FREESURFER_HOME"] = "/Applications/freesurfer/7.4.1"
-        os.environ["SUBJECTS_DIR"] = "/Applications/freesurfer/7.4.1/subjects"
 
         # run petdeface on the copied dataset, excluding sub-02
         petdeface = PetDeface(
@@ -188,9 +181,6 @@ def test_participant_exclusion():
         if derivatives_dir.exists():
             sub01_defacemasks = list(derivatives_dir.glob("**/sub-01*defacemask*"))
             sub01_lta_files = list(derivatives_dir.glob("**/sub-01*.lta"))
-
-            print(f"DEBUG: sub-01 defacemasks found: {len(sub01_defacemasks)}")
-            print(f"DEBUG: sub-01 lta files found: {len(sub01_lta_files)}")
 
             assert (
                 len(sub01_defacemasks) > 0
