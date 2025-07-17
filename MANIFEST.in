@@ -1,0 +1,3 @@
+include petdeface/data/**/*T1w.nii
+include petdeface/data/**/*T1w.nii.gz
+include petdeface/data/**/*T1w.json

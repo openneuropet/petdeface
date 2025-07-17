@@ -12,6 +12,9 @@ __pycache__/
 # ignore dist
 dist/
 
+# ignore egg-info
+petdeface.egg-info/
+
 # nipype generates pickle files, we need to redirect where it stores them,
 # but until then hack fix
 *.pkl
