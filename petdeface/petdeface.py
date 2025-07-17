@@ -6,14 +6,11 @@ import re
 import sys
 import shutil
 from bids import BIDSLayout, BIDSLayoutIndexer
-import importlib
 import glob
 from platform import system
-
-# import shutil
+from pathlib import Path
 import subprocess
 from typing import Union
-
 from nipype.interfaces.freesurfer import MRICoreg
 from nipype.interfaces.io import DataSink
 from nipype.interfaces.base.traits_extension import File as traits_extensionFile
@@ -22,23 +19,36 @@ from niworkflows.engine.workflows import LiterateWorkflow as Workflow
 from niworkflows.utils.bids import collect_data
 from niworkflows.utils.bids import collect_participants
 from niworkflows.utils.misc import check_valid_fs_license
-
 from petutils.petutils import collect_anat_and_pet
 from importlib.metadata import version
 
+# Determine if we're running as a script (including through debugger)
+is_script = (
+    __name__ == "__main__"
+    or len(sys.argv) > 0
+    and sys.argv[0].endswith("petdeface.py")
+    or "debugpy" in sys.modules
+)
 
-try:
-    from mideface import ApplyMideface
-    from mideface import Mideface
+if is_script:
+    # Running as script - add current directory to path for local imports
+    current_dir = Path(__file__).parent
+    if str(current_dir) not in sys.path:
+        sys.path.insert(0, str(current_dir))
+
+    # Import using absolute imports (script mode)
+    from mideface import ApplyMideface, Mideface
     from pet import WeightedAverage
-    from utils import run_validator
     from qa import run_qa
-except ModuleNotFoundError:
-    from .mideface import ApplyMideface
-    from .mideface import Mideface
+    from utils import run_validator
+    from noanat import copy_default_anat_to_subject, remove_default_anat
+else:
+    # Running as module - use relative imports
+    from .mideface import ApplyMideface, Mideface
     from .pet import WeightedAverage
-    from .utils import run_validator
     from .qa import run_qa
+    from .utils import run_validator
+    from .noanat import copy_default_anat_to_subject, remove_default_anat
 
 
 # collect version from pyproject.toml
@@ -51,6 +61,8 @@ __version__ = "unable to locate version number"
 # we use the default version at the time of this writing, but the most current version
 # can be found in the pyproject.toml file under the [tool.bids] section
 __bids_version__ = "1.8.0"
+
+temp_anat_subjects = []
 
 
 if __version__ == "unable to locate version number":
@@ -274,6 +286,7 @@ def deface(args: Union[dict, argparse.Namespace]) -> None:
                 anat_only=args.anat_only,
                 session_label=args.session_label,
                 session_label_exclude=args.session_label_exclude,
+                use_template_anat=args.use_template_anat,
             )
         except FileNotFoundError as error:
             single_subject_wf = None
@@ -313,6 +326,7 @@ def init_single_subject_wf(
     anat_only=False,
     session_label=[],
     session_label_exclude=[],
+    use_template_anat=None,
 ) -> Workflow:
     """
     Organize the preprocessing pipeline for a single subject.
@@ -323,7 +337,7 @@ def init_single_subject_wf(
     :type bids_data: pathlib.Path, BIDSLayout]
     :param output_dir: _description_, defaults to None
     :type output_dir: pathlib.Path, optional
-    :param preview_pics: _description_, defaults to False
+    :param preview_pics: _description_, defaults to False (soon to be deprecated)
     :type preview_pics: bool, optional
     :param anat_only: _description_, defaults to False
     :type anat_only: bool, optional
@@ -331,6 +345,8 @@ def init_single_subject_wf(
     :type session: list, optional
     :param session_label_exclude: _description_, will exclude any session(s) supplied to this argument, defaults to []
     :type session_label_exclude: list, optional
+    :param use_template_anat: _description_, will attempt to deface PET images lacking a T1w with existing template T1w packaged in petdeface, default to False,
+    :type use_template_anat: str, optional
     :raises FileNotFoundError: _description_
     :return: _description_
     :rtype: Workflow
@@ -360,10 +376,26 @@ def init_single_subject_wf(
 
     # check if any t1w images exist for the pet images
     for pet_image, t1w_image in subject_data.items():
-        if t1w_image == "":
+        if t1w_image == "" and not use_template_anat:
             raise FileNotFoundError(
                 f"Could not find t1w image for pet image {pet_image}"
             )
+        elif t1w_image == "" and use_template_anat:
+            created_items = copy_default_anat_to_subject(
+                bids_dir=bids_data.root,
+                subject_id=str(pet_image),
+                pet_image=pet_image,
+                default_anat=use_template_anat,
+            )
+            global temp_anat_subjects
+            temp_anat_subjects.append(created_items)
+            subject_data[pet_image] = str(
+                created_items.get("created_files", ["", ""])[0]
+            )
+
+    # if we're adding in new t1w's and folder's we'll need to refresh the BIDS.layout object to reflect
+    # those new changes
+    bids_data = BIDSLayout(bids_data.root)
 
     bids_dir = bids_data.root
 
@@ -404,39 +436,82 @@ def init_single_subject_wf(
         if determine_in_docker():
             preview_pics = False
 
-        deface_t1w = Node(
-            Mideface(
-                in_file=pathlib.Path(t1w_file),
-                pics=preview_pics,
-                odir=".",
-                code=f"{anat_string}",
-            ),
-            name=f"deface_t1w_{anat_string}",
+        # Check if this is a template anatomical image created from PET averaging
+        is_template_from_pet = use_template_anat == "pet" and "desc-totallyat1w" in str(
+            t1w_file
         )
-        t1w_wf.connect(
-            [
-                (
-                    deface_t1w,
-                    datasink,
-                    [
-                        ("out_file", f"{anat_string.replace('_', '.')}.anat"),
-                        (
-                            "out_facemask",
-                            f"{anat_string.replace('_', '.')}.anat.@defacemask",
-                        ),
-                        (
-                            "out_before_pic",
-                            f"{anat_string.replace('_', '.')}.anat.@before",
-                        ),
-                        (
-                            "out_after_pic",
-                            f"{anat_string.replace('_', '.')}.anat.@after",
-                        ),
-                    ],
+
+        if is_template_from_pet:
+            # For PET-averaged templates, we need to create a facemask without defacing the template
+            # We'll use Mideface to generate the facemask but not apply it to the template
+
+            # Create a node that generates facemask but doesn't deface the template
+            template_facemask = Node(
+                Mideface(
+                    in_file=pathlib.Path(t1w_file),
+                    pics=False,  # No preview pics for templates
+                    odir=".",
+                    code=f"{anat_string}_template",
                 ),
-            ]
-        )
-        t1w_workflows[t1w_file] = {"workflow": t1w_wf, "anat_string": anat_string}
+                name=f"deface_t1w_{anat_string}",
+            )
+
+            # Only connect the facemask output, not the defaced template
+            # This way we get the facemask for PET defacing but don't deface the template itself
+            t1w_wf.connect(
+                [
+                    (
+                        template_facemask,
+                        datasink,
+                        [
+                            (
+                                "out_facemask",
+                                f"{anat_string.replace('_', '.')}.anat.@defacemask",
+                            ),
+                        ],
+                    ),
+                ]
+            )
+        else:
+            # Normal defacing for real anatomical images
+            deface_t1w = Node(
+                Mideface(
+                    in_file=pathlib.Path(t1w_file),
+                    pics=preview_pics,
+                    odir=".",
+                    code=f"{anat_string}",
+                ),
+                name=f"deface_t1w_{anat_string}",
+            )
+            t1w_wf.connect(
+                [
+                    (
+                        deface_t1w,
+                        datasink,
+                        [
+                            ("out_file", f"{anat_string.replace('_', '.')}.anat"),
+                            (
+                                "out_facemask",
+                                f"{anat_string.replace('_', '.')}.anat.@defacemask",
+                            ),
+                            (
+                                "out_before_pic",
+                                f"{anat_string.replace('_', '.')}.anat.@before",
+                            ),
+                            (
+                                "out_after_pic",
+                                f"{anat_string.replace('_', '.')}.anat.@after",
+                            ),
+                        ],
+                    ),
+                ]
+            )
+
+        t1w_workflows[t1w_file] = {
+            "workflow": t1w_wf,
+            "anat_string": anat_string,
+            "is_template_from_pet": is_template_from_pet,
+        }
 
     workflow = Workflow(name=name)
     if anat_only:
@@ -455,9 +530,10 @@ def init_single_subject_wf(
             if ses_id.replace("ses-", "") in sessions_to_exclude:
                 continue
 
-            # collect tracer
+            # collect tracer for filename only
+            tracer_info = ""
             if re.search("trc-[^_|\/]*", str(pet_file)):
-                pet_string += "_" + re.search("trc-[^_|\/]*", str(pet_file)).group(0)
+                tracer_info = "_" + re.search("trc-[^_|\/]*", str(pet_file)).group(0)
 
             # collect recontstruction
             if re.search("rec-[^_|\/]*", str(pet_file)):
@@ -468,7 +544,8 @@ def init_single_subject_wf(
                 run_id = "_" + re.search("run-[^_|\/]*", str(pet_file)).group(0)
             except AttributeError:
                 run_id = ""
-            pet_wf_name = f"pet_{pet_string}{run_id}_wf"
+            # Create workflow name with tracer for uniqueness
+            pet_wf_name = f"pet_{pet_string}{tracer_info}{run_id}_wf"
             pet_wf = Workflow(name=pet_wf_name)
 
             weighted_average = Node(
@@ -478,7 +555,12 @@ def init_single_subject_wf(
             # rename registration file to something more descriptive than registration.lta
             # we do this here to account for mulitple runs during the same session
             mricoreg = MRICoreg(reference_file=t1w_file)
-            mricoreg.inputs.out_lta_file = f"{pet_string}{run_id}_desc-pet2anat_pet.lta"
+            if use_template_anat:
+                mricoreg.inputs.dof = 12
+
+            mricoreg.inputs.out_lta_file = (
+                f"{pet_string}{tracer_info}{run_id}_desc-pet2anat_pet.lta"
+            )
 
             coreg_pet_to_t1w = Node(mricoreg, "coreg_pet_to_t1w")
 
@@ -662,12 +744,20 @@ def wrap_up_defacing(
                 mapping_dict[defaced] = raw
 
     if placement == "adjacent":
-        if output_dir is None or output_dir == path_to_dataset:
+        if (
+            output_dir is None
+            or output_dir == path_to_dataset
+            or pathlib.Path(output_dir)
+            == pathlib.Path(os.path.join(path_to_dataset, "derivatives", "petdeface"))
+        ):
             final_destination = f"{path_to_dataset}_defaced"
         else:
             final_destination = output_dir
 
         # copy original dataset to new location, respecting exclusions
+        # Use a set to track copied files to avoid duplicates
+        copied_files = set()
+
         for entry in raw_only.files:
             # Check if this file belongs to an excluded subject
             should_exclude = False
@@ -688,12 +778,21 @@ def wrap_up_defacing(
             if should_exclude:
                 continue
 
+            # Create the destination path
             copy_path = entry.replace(str(path_to_dataset), str(final_destination))
+
+            # Check if we've already copied a file with the same basename
+            # This prevents duplicates like trc-sf51/pet/file.nii.gz and pet/file.nii.gz
+            basename = os.path.basename(entry)
+            if basename in copied_files:
+                continue
+
             pathlib.Path(copy_path).parent.mkdir(
                 parents=True, exist_ok=True, mode=0o775
             )
             if entry != copy_path:
                 shutil.copy(entry, copy_path)
+                copied_files.add(basename)
 
         # update paths in mapping dict
         move_defaced_images(mapping_dict, final_destination)
@@ -823,10 +922,11 @@ class PetDeface:
         skip_bids_validator=False,
         remove_existing=True,
         placement="adjacent",
-        preview_pics=True,
+        preview_pics=False,
         participant_label_exclude=[],
         session_label=[],
         session_label_exclude=[],
+        use_template_anat=False,
     ):
         self.bids_dir = bids_dir
         self.remove_existing = remove_existing
@@ -840,8 +940,9 @@ class PetDeface:
         self.participant_label_exclude = participant_label_exclude
         self.session_label = session_label
         self.session_label_exclude = session_label_exclude
+        self.use_template_anat = use_template_anat
 
-        # Build comprehensive exclusion indexer considering both include and exclude parameters
+        # Build the exclusion indexer
         self.exclude_indexer = self._build_exclusion_indexer()
 
         # check if freesurfer license is valid
@@ -933,8 +1034,16 @@ class PetDeface:
                 "participant_label_exclude": self.participant_label_exclude,
                 "session_label": self.session_label,
                 "session_label_exclude": self.session_label_exclude,
+                "use_template_anat": self.use_template_anat,
             }
         )
+
+        # we want to remove any "t1ws" that we previously substituted in before we copy all
+        # of them into the final directory
+        global temp_anat_subjects
+        for temp_anat_subject in temp_anat_subjects:
+            remove_default_anat(bids_dir=self.bids_dir, created_items=temp_anat_subject)
+
         wrap_up_defacing(
             self.bids_dir,
             self.output_dir,
@@ -1060,10 +1169,17 @@ def cli():
         default=[],
     )
     parser.add_argument(
-        "--open-browser",
+        "--use_template_anat",
+        help="Use template anatomical image when no T1w is available for PET scans. Options: 't1' (included T1w template), 'mni' (MNI template), or 'pet' (averaged PET image).",
+        type=str,
+        required=False,
+        default=False,
+    )
+    parser.add_argument(
+        "--open_browser",
+        help="Open browser to show QA reports after completion",
         action="store_true",
         default=False,
-        help="Open browser automatically after QA report generation",
     )
 
     arguments = parser.parse_args()
@@ -1262,6 +1378,7 @@ def main():  # noqa: max-complexity: 12
             participant_label_exclude=args.participant_label_exclude,
             session_label=args.session_label,
             session_label_exclude=args.session_label_exclude,
+            use_template_anat=args.use_template_anat,
         )
         petdeface.run()
 
@@ -1272,23 +1389,12 @@ def main():  # noqa: max-complexity: 12
 
         try:
             # Determine the defaced directory based on placement
-            if args.placement == "adjacent":
-                defaced_dir = args.bids_dir.parent / f"{args.bids_dir.name}_defaced"
-            elif args.placement == "inplace":
-                defaced_dir = args.bids_dir
-            elif args.placement == "derivatives":
-                defaced_dir = args.bids_dir / "derivatives" / "petdeface"
-            else:
-                defaced_dir = (
-                    args.output_dir
-                    if args.output_dir
-                    else args.bids_dir / "derivatives" / "petdeface"
-                )
 
             # Run QA
             qa_result = run_qa(
                 faced_dir=str(args.bids_dir),
-                defaced_dir=str(defaced_dir),
+                defaced_dir=str(args.output_dir),
+                output_dir=str(args.bids_dir / "derivatives" / "petdeface"),
                 subject=(
                     " ".join(args.participant_label) if args.participant_label else None
                 ),

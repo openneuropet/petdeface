@@ -2,6 +2,7 @@ import argparse
 import os
 import tempfile
 import shutil
+import sys
 from glob import glob
 import nilearn
 from nilearn import plotting
@@ -17,14 +18,35 @@ from functools import partial
 import seaborn as sns
 from PIL import Image, ImageDraw
 from nipype import Workflow, Node
-from nireports.interfaces.reporting.base import SimpleBeforeAfterRPT
 from tempfile import TemporaryDirectory
 from pathlib import Path
+
+# Handle imports for both script and module execution (including debugger)
+is_script = (
+    __name__ == "__main__"
+    or len(sys.argv) > 0
+    and sys.argv[0].endswith("qa.py")
+    or "debugpy" in sys.modules
+)
+
+if is_script:
+    # Running as script - add current directory to path for local imports
+    current_dir = Path(__file__).parent
+    if str(current_dir) not in sys.path:
+        sys.path.insert(0, str(current_dir))
+
+# Import nireports - this should work in both script and module mode
+from nireports.interfaces.reporting.base import SimpleBeforeAfterRPT
 
 
 def preprocess_single_subject(s, output_dir):
     """Preprocess a single subject's images (for parallel processing)."""
     temp_dir = os.path.join(output_dir, "temp_3d_images")
+
+    # Debug: Print what files we're processing
+    print(f"Preprocessing subject {s['id']}:")
+    print(f"  Original: {s['orig_path']}")
+    print(f"  Defaced: {s['defaced_path']}")
 
     # Extract BIDS suffix from original path to preserve meaningful naming
     orig_basename = os.path.basename(s["orig_path"])
@@ -484,7 +506,13 @@ def create_comparison_html(
         ("original", orig_img, orig_basename, "hot"),  # Colored for original
         ("defaced", defaced_img, defaced_basename, "gray"),  # Grey for defaced
     ]:
-        # save image to temp folder for later loading
+        # Debug: Print what we're processing
+        print(f"Processing {label} image: {basename}")
+        print(f"  Image shape: {img.shape}")
+        print(f"  Image data type: {img.get_data_dtype()}")
+        print(
+            f"  Image min/max: {img.get_fdata().min():.3f}/{img.get_fdata().max():.3f}"
+        )
 
         # Create single sagittal slice using matplotlib directly
         img_data = img.get_fdata()
@@ -819,6 +847,13 @@ def build_subjects_from_datasets(orig_dir, defaced_dir):
     defaced_map = {get_unique_key(f): f for f in defaced_files}
     common_keys = sorted(set(orig_map.keys()) & set(defaced_map.keys()))
 
+    # Debug: Print what files are being found
+    print(f"Found {len(orig_files)} files in original directory")
+    print(f"Found {len(defaced_files)} files in defaced directory")
+    print(f"Found {len(common_keys)} common files")
+    for key in common_keys:
+        print(f"  {key}: {orig_map[key]} -> {defaced_map[key]}")
+
     subjects = []
     for key in common_keys:
         orig_path = orig_map[key]
@@ -833,19 +868,40 @@ def build_subjects_from_datasets(orig_dir, defaced_dir):
         else:
             subject_id = sub_id
 
+        # Check if this is a T1w file (prioritize T1w over PET)
+        is_t1w = "T1w" in orig_path or "T1w" in defaced_path
+
         subjects.append(
             {
                 "id": subject_id,
                 "orig_path": orig_path,
                 "defaced_path": defaced_path,
+                "is_t1w": is_t1w,
             }
         )
 
-    if not subjects:
+    # Sort subjects to prioritize T1w files over PET files
+    subjects.sort(key=lambda x: (not x["is_t1w"], x["id"]))
+
+    # For each subject, only keep the T1w file if available, otherwise keep the first file
+    filtered_subjects = []
+    seen_subjects = set()
+
+    for subject in subjects:
+        subject_id = subject["id"]
+        if subject_id not in seen_subjects:
+            filtered_subjects.append(subject)
+            seen_subjects.add(subject_id)
+        elif subject["is_t1w"]:
+            # Replace the existing entry with the T1w version
+            filtered_subjects = [s for s in filtered_subjects if s["id"] != subject_id]
+            filtered_subjects.append(subject)
+
+    if not filtered_subjects:
         print("No matching NIfTI files found in both datasets.")
         exit(1)
 
-    return subjects
+    return filtered_subjects
 
 
 def create_side_by_side_index_html(subjects, output_dir, size="compact"):
@@ -1349,7 +1405,7 @@ def run_qa(
     </html>
     """
 
-    index_file = os.path.join(output_dir, "index.html")
+    index_file = os.path.join(output_dir, "petdeface_report.html")
     with open(index_file, "w") as f:
         f.write(index_html)
 
@@ -1387,7 +1443,7 @@ def run_qa(
 
     print(f"Created side-by-side view: {side_by_side_file}")
     print(f"Created animated view: {animated_file}")
-    print(f"Created main index: {index_file}")
+    print(f"Created main report: {index_file}")
     print(f"Saved command to: {command_file}")
 
     # Open browser if requested
@@ -1396,13 +1452,13 @@ def run_qa(
         print(f"Opened browser to: {index_file}")
 
     print(f"\nAll files generated in: {output_dir}")
-    print(f"Open index.html in your browser to view comparisons")
+    print(f"Open petdeface_report.html in your browser to view comparisons")
 
     return {
         "output_dir": output_dir,
         "side_by_side_file": side_by_side_file,
         "animated_file": animated_file,
-        "index_file": index_file,
+        "report_file": index_file,
         "command_file": command_file,
         "subjects_processed": len(successful),
         "total_subjects": len(preprocessed_subjects),
