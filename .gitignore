@@ -4,6 +4,7 @@
 
 # ignore virtualenv
 venv/
+.venv/
 
 # ignore pycache
 __pycache__/

@@ -161,12 +161,27 @@ trouble running this container in singularity/apptainer.
 
 ## Development
 
-This project uses poetry to package and build, to create a pip installable version of the package run:
+This project supports both [UV](https://github.com/astral-sh/uv) and standard Python (pip + build) workflows for development and packaging.
+
+### Using UV (recommended for speed)
 
 ```bash
 git clone https://github.com/openneuropet/petdeface.git
 cd petdeface
-poetry build
+uv build
+pip install dist/petdeface-<X.X.X>-py3-none-any.whl # where X.X.X is the version number of the generated file
+```
+
+### Using pip and python (no UV required)
+
+```bash
+git clone https://github.com/openneuropet/petdeface.git
+cd petdeface
+pip install --upgrade pip
+pip install .[dev]
+# To build a wheel or sdist:
+pip install build
+python -m build
 pip install dist/petdeface-<X.X.X>-py3-none-any.whl # where X.X.X is the version number of the generated file
 ```
 

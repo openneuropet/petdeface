@@ -12,25 +12,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      
-      - name: Install dependencies
-        run: |
-          pipx install poetry
-          poetry install
-
-      - name: Set up Python
-        uses: actions/setup-python@v4
+      - uses: actions/setup-python@v4
         with:
           python-version: 3.11
-          cache: 'poetry'
-
-      - name: Build
+      - name: Build Package
         run: |
-          poetry build
+          uv sync --dev
+          uv build
 
-      - name: Publish
-        if: ${{ !contains(github.ref_name, 'test') }}
+      - name: Check PyPI token
         run: |
-          echo "Publishing to PyPI..."
-          poetry config pypi-token.pypi $PYPI_TOKEN
-          poetry publish
+          if [ -z "$PYPI_TOKEN_PETDEFACE" ]; then
+            echo "Error: PYPI_TOKEN_PETDEFACE is not set or is empty check your secrets"
+            exit 1
+          fi
+
+      - name: Publish Package
+        run: |
+          uv publish --token $PYPI_TOKEN_PETDEFACE
