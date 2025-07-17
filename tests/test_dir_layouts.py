@@ -159,68 +159,6 @@ def test_participant_exclusion():
 
         # Check the final defaced dataset directory
         final_defaced_dir = test_dir / "participant_exclusion_defaced"
-        print(f"DEBUG: Final defaced directory: {final_defaced_dir}")
-
-        # Debug: Run tree on the output directory
-        try:
-            import subprocess
-
-            tree_result = subprocess.run(
-                ["tree", str(final_defaced_dir)],
-                capture_output=True,
-                text=True,
-                timeout=30,
-            )
-            print("DEBUG: Tree output of final defaced directory:")
-            print(tree_result.stdout)
-            if tree_result.stderr:
-                print("DEBUG: Tree stderr:", tree_result.stderr)
-
-            # Save tree output to home directory for debugging
-            import os
-
-            home_dir = os.path.expanduser("~")
-            with open(os.path.join(home_dir, "final_defaced_dir_tree.txt"), "w") as f:
-                f.write(f"Final defaced directory: {final_defaced_dir}\n")
-                f.write(tree_result.stdout)
-                f.write(f"\nStderr: {tree_result.stderr}\n")
-            print(
-                f"DEBUG: Final defaced directory tree saved to ~/final_defaced_dir_tree.txt"
-            )
-        except (subprocess.TimeoutExpired, FileNotFoundError, Exception) as e:
-            print(f"DEBUG: Could not run tree: {e}")
-            # Fallback: list directories manually
-            print("DEBUG: Manual directory listing:")
-            for root, dirs, files in os.walk(final_defaced_dir):
-                level = root.replace(str(final_defaced_dir), "").count(os.sep)
-                indent = " " * 2 * level
-                print(f"{indent}{os.path.basename(root)}/")
-                subindent = " " * 2 * (level + 1)
-                for file in files:
-                    print(f"{subindent}{file}")
-
-        # Debug: Check what's in the original data directory
-        print(f"DEBUG: Original data directory structure:")
-        try:
-            tree_result = subprocess.run(
-                ["tree", str(test_dir / "participant_exclusion")],
-                capture_output=True,
-                text=True,
-                timeout=30,
-            )
-            print(tree_result.stdout)
-
-            # Save tree output to home directory for debugging
-            import os
-
-            home_dir = os.path.expanduser("~")
-            with open(os.path.join(home_dir, "original_dir_tree.txt"), "w") as f:
-                f.write(f"Original directory: {test_dir / 'participant_exclusion'}\n")
-                f.write(tree_result.stdout)
-                f.write(f"\nStderr: {tree_result.stderr}\n")
-            print(f"DEBUG: Original directory tree saved to ~/original_dir_tree.txt")
-        except Exception as e:
-            print(f"DEBUG: Could not run tree on original dir: {e}")
 
         # Count files in the final defaced dataset
         all_files = list(final_defaced_dir.rglob("*"))
@@ -233,17 +171,6 @@ def test_participant_exclusion():
         sub02_files = [
             f for f in all_files if "sub-02" in str(f) and "/derivatives/" not in str(f)
         ]
-
-        print(
-            f"DEBUG: Total files in defaced dataset (excluding derivatives): {len([f for f in all_files if '/derivatives/' not in str(f)])}"
-        )
-        print(f"DEBUG: sub-01 files (excluding derivatives): {len(sub01_files)}")
-        print(f"DEBUG: sub-02 files (excluding derivatives): {len(sub02_files)}")
-
-        if sub02_files:
-            print(
-                f"DEBUG: Found sub-02 files outside derivatives: {[str(f) for f in sub02_files]}"
-            )
 
         # Verify that sub-02 does NOT appear anywhere in the main defaced dataset (outside derivatives)
         assert (
@@ -271,14 +198,6 @@ def test_participant_exclusion():
             assert (
                 len(sub01_lta_files) > 0
             ), "sub-01 should have been processed and have lta registration files"
-
-        # DEBUG: Pause here to allow manual inspection
-        print(f"\n" + "=" * 80)
-        print(f"DEBUG PAUSE: Test directory is at: {test_dir}")
-        print(f"DEBUG PAUSE: Final defaced directory is at: {final_defaced_dir}")
-        print(f"DEBUG PAUSE: Press Enter to continue and clean up...")
-        print(f"=" * 80)
-        input()
 
 
 def test_no_anat():
