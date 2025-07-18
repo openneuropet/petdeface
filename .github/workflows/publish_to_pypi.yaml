@@ -4,6 +4,15 @@ on:
   push:
     tags:
       - '**'
+  workflow_call:
+  workflow_dispatch:
+    inputs:
+      debug_enabled:
+        type: boolean
+        description: 'Run the build with tmate debugging enabled (https://github.com/marketplace/actions/debugging-with-tmate)'
+        required: false
+        default: false
+
 env:
   PYPI_TOKEN: ${{ secrets.PYPI_TOKEN_PETDEFACE }}
 
