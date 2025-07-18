@@ -33,11 +33,11 @@ jobs:
 
       - name: Check PyPI token
         run: |
-          if [ -z "$PYPI_TOKEN_PETDEFACE" ]; then
+          if [ -z "$PYPI_TOKEN" ]; then
             echo "Error: PYPI_TOKEN_PETDEFACE is not set or is empty check your secrets"
             exit 1
           fi
 
       - name: Publish Package
         run: |
-          uv publish --token $PYPI_TOKEN_PETDEFACE
+          uv publish --token $PYPI_TOKEN
