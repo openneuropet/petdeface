@@ -15,7 +15,7 @@ dependencies = [
     "petutils>=0.0.1",
     "niworkflows>=1.11.0",
     "matplotlib>=3.10.1",
-    "niftifixer @ git+https://github.com/openneuropet/nifti_fixer.git",
+    "niftifixer>=0.0.2",
     "bids-validator-deno>=2.0.5",
     "nipreps>=1.0",
     "nireports>=25.2.0",
