@@ -16,9 +16,10 @@ from petdeface.noanat import (
     remove_default_anat,
 )
 
-
 # Path to the test data directory
-data_dir = Path(__file__).parent.parent / "data"
+project_root = Path(__file__).parent.parent
+# data is now at the top level
+data_dir = project_root / "data"
 
 
 @pytest.fixture
@@ -171,7 +172,7 @@ def test_copy_default_anat_to_subject():
         assert anat_dir in result["created_dirs"]
 
         # Check that the files were created
-        target_nii = anat_dir / "sub-123_T1w.nii"
+        target_nii = anat_dir / "sub-123_T1w.nii.gz"
         target_json = anat_dir / "sub-123_T1w.json"
         assert target_nii.exists()
         assert target_json.exists()
@@ -199,7 +200,7 @@ def test_copy_default_anat_to_subject_existing_anat_dir():
         assert anat_dir not in result["created_dirs"]
 
         # Check that the files were created
-        target_nii = anat_dir / "sub-123_T1w.nii"
+        target_nii = anat_dir / "sub-123_T1w.nii.gz"
         target_json = anat_dir / "sub-123_T1w.json"
         assert target_nii.exists()
         assert target_json.exists()
@@ -235,7 +236,7 @@ def test_remove_default_anat_with_created_items():
 
         # Check that the files and directories exist
         anat_dir = subject_dir / "anat"
-        target_nii = anat_dir / "sub-123_T1w.nii"
+        target_nii = anat_dir / "sub-123_T1w.nii.gz"
         target_json = anat_dir / "sub-123_T1w.json"
         assert anat_dir.exists()
         assert target_nii.exists()
@@ -266,7 +267,7 @@ def test_remove_default_anat_with_subject_id():
 
         # Check that the files and directories exist
         anat_dir = subject_dir / "anat"
-        target_nii = anat_dir / "sub-123_T1w.nii"
+        target_nii = anat_dir / "sub-123_T1w.nii.gz"
         target_json = anat_dir / "sub-123_T1w.json"
         assert anat_dir.exists()
         assert target_nii.exists()
@@ -298,7 +299,7 @@ def test_remove_default_anat_nonexistent_files():
             "anat_dir": subject_dir / "anat",
             "created_dirs": [subject_dir / "anat"],
             "created_files": [
-                subject_dir / "anat" / "sub-123_T1w.nii",
+                subject_dir / "anat" / "sub-123_T1w.nii.gz",
                 subject_dir / "anat" / "sub-123_T1w.json",
             ],
         }
@@ -356,7 +357,7 @@ def test_remove_default_anat_nonempty_directory():
         remove_default_anat(tmp_bids_dir, created_items=created_items)
 
         # Check that the files were removed but the directory still exists
-        assert not (anat_dir / "sub-123_T1w.nii").exists()
+        assert not (anat_dir / "sub-123_T1w.nii.gz").exists()
         assert not (anat_dir / "sub-123_T1w.json").exists()
         assert anat_dir.exists()
         assert extra_file.exists()

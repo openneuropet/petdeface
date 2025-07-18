@@ -14,6 +14,9 @@ This software can be installed via source or via pip from PyPi with `pip install
 |---------| ------ |
 | `docker build . -t petdeface` | ![docker_build](https://codebuild.us-east-1.amazonaws.com/badges?uuid=eyJlbmNyeXB0ZWREYXRhIjoiYzdXV0tYSkQzTVNkcG04cHA2S055UXlKRlZTU1VONThUMVRoZVcwU3l1aHFhdVBlNDNaRGVCYzdWM1Q0WjYzQ1lRU2ZTSHpmSERPWFRkVXVyb3k3RTZBPSIsIml2UGFyYW1ldGVyU3BlYyI6IjRCZFFIQnNGT2lKcDA1VG4iLCJtYXRlcmlhbFNldFNlcmlhbCI6MX0%3D&branch=main) |
 | `docker push` | ![docker push icon](https://codebuild.us-east-1.amazonaws.com/badges?uuid=eyJlbmNyeXB0ZWREYXRhIjoia0c1bEJYUGI2SXlWYi9JMm1tcGtiYWVTdVd3bmlnOUFaTjN4QjJITU5PTVpvQnN3TlowajhxNmhHY2RwQ2Z5SU93OExqc2xvMzFnTHFvajlqVk1MV2FzPSIsIml2UGFyYW1ldGVyU3BlYyI6Ikl6SzRyc1RabzBnSkplTjciLCJtYXRlcmlhbFNldFNlcmlhbCI6MX0%3D&branch=main) |
+| `Python 3.14 >= 3.10` | [![Check Python Compatibility](https://github.com/openneuropet/petdeface/actions/workflows/check_python_compatibility.yaml/badge.svg)](https://github.com/openneuropet/petdeface/actions/workflows/check_python_compatibility.yaml) |
+| `packaging` | [![Publish to PyPI](https://github.com/openneuropet/petdeface/actions/workflows/publish_to_pypi.yaml/badge.svg)](https://github.com/openneuropet/petdeface/actions/workflows/publish_to_pypi.yaml) |
+| `Docs` | ![RTD BADGE](https://app.readthedocs.org/projects/petdeface/badge/?version=latest&style=default) |
 
 ## Requirements
 
@@ -161,12 +164,27 @@ trouble running this container in singularity/apptainer.
 
 ## Development
 
-This project uses poetry to package and build, to create a pip installable version of the package run:
+This project supports both [UV](https://github.com/astral-sh/uv) and standard Python (pip + build) workflows for development and packaging.
+
+### Using UV (recommended for speed)
 
 ```bash
 git clone https://github.com/openneuropet/petdeface.git
 cd petdeface
-poetry build
+uv build
+pip install dist/petdeface-<X.X.X>-py3-none-any.whl # where X.X.X is the version number of the generated file
+```
+
+### Using pip and python (no UV required)
+
+```bash
+git clone https://github.com/openneuropet/petdeface.git
+cd petdeface
+pip install --upgrade pip
+pip install .[dev]
+# To build a wheel or sdist:
+pip install build
+python -m build
 pip install dist/petdeface-<X.X.X>-py3-none-any.whl # where X.X.X is the version number of the generated file
 ```
 

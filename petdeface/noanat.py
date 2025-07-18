@@ -29,19 +29,25 @@ def get_data_path(filename: str) -> Path:
     FileNotFoundError
         If the requested file is not found in the package data
     """
-    # Get the path to the data directory
-    data_dir = Path(__file__).parent.parent / "data"
+    # First try the top-level data directory (for development)
+    project_root = Path(__file__).parent.parent.parent
+    top_level_data_dir = project_root / "data"
+    file_path = top_level_data_dir / filename
 
-    # Construct the full path
-    full_path = data_dir / filename
+    if file_path.exists():
+        return file_path
+    # Fallback: try to find the file in the installed package data
+    module_dir = Path(__file__).parent
+    package_data_dir = module_dir / "data"
+    file_path = package_data_dir / filename
 
-    # Check if the file exists
-    if not full_path.exists():
-        raise FileNotFoundError(
-            f"Could not find data file {filename} in data directory"
-        )
+    if file_path.exists():
+        return file_path
 
-    return full_path
+    # If neither location works, raise an error
+    raise FileNotFoundError(
+        f"Could not find data file {filename} in package data at {package_data_dir / filename} or {top_level_data_dir / filename}"
+    )
 
 
 def get_default_anat(anat) -> Path:
@@ -302,7 +308,7 @@ def remove_default_anat(
         anat_dir = subject_dir / "anat"
 
         # Define the file paths
-        target_nii = anat_dir / f"sub-{extracted_id}_T1w.nii"
+        target_nii = anat_dir / f"sub-{extracted_id}_T1w.nii.gz"
         target_json = anat_dir / f"sub-{extracted_id}_T1w.json"
 
         # Check if the files exist

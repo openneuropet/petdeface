@@ -1,57 +1,57 @@
-[tool.poetry]
+[project]
 name = "petdeface"
 version = "0.3.0"
 description = "A nipype PET and MR defacing pipeline for BIDS datasets utilizing FreeSurfer's MiDeFace."
-authors = ["Martin Nørgaard <martin.noergaard@nru.dk>", "Anthony Galassi <28850131+bendhouseart@users.noreply.github.com>", "Murat Bilgel <bilgelm@gmail.com>"]
-license = "MIT"
-readme = "README.md"
-include = [
-    "petdeface/*",
-    "pyproject.toml",
-    "data/sub-01/ses-baseline/anat/sub-01_ses-baseline_T1w.nii.gz",
-    "data/sub-01/ses-baseline/anat/sub-01_ses-baseline_T1w.json",
-    "data/sub-mni305/anat/sub-mni305_T1w.nii.gz",
-    "data/sub-mni305/anat/sub-mni305_T1w.json",
+authors = [
+    {name = "Martin Nørgaard", email = "martin.noergaard@nru.dk"},
+    {name = "Anthony Galassi", email = "28850131+bendhouseart@users.noreply.github.com"},
+    {name = "Murat Bilgel", email = "bilgelm@gmail.com"}
 ]
+license = {text = "MIT"}
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "setuptools>=68.1.2",
+    "petutils>=0.0.1",
+    "niworkflows>=1.11.0",
+    "matplotlib>=3.10.1",
+    "niftifixer @ git+https://github.com/openneuropet/nifti_fixer.git",
+    "bids-validator-deno>=2.0.5",
+    "nipreps>=1.0",
+    "nireports>=25.2.0",
+    "nibabel>=5.3.2",
+    "nilearn>=0.10.4",
+    "numpy>=2.1.3",
+    "scipy>=1.14.1",
+    "seaborn>=0.13.2",
+    "pillow>=11.0.0",
+    "imageio>=2.36.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "black>=23.7.0",
+    "flake8>=6.1.0",
+    "isort>=5.12.0",
+    "pre-commit>=3.3.3",
+    "pytest>=7.4.2",
+    "sphinx>=7.2.6",
+    "sphinx-rtd-theme>=3.0.1",
+    "jupyterlab>=4.4.1",
+    "notebook>=7.4.1",
+    "nbconvert>=7.16.6",
+    "ipywidgets>=8.1.6",
+    "matplotlib>=3.10.1",
+    "pandas>=2.2.3",
+    "pyqt6>=6.9.0",
+]
+
+[project.scripts]
+petdeface = "petdeface.petdeface:main"
 
 # please update the bids version to the latest compliant version when making modifications to this code here
 [tool.bids]
 bids_version = "1.8.0"
-
-[tool.poetry.dependencies]
-python = ">=3.10, <4.0"
-setuptools = "^68.1.2"
-petutils = "^0.0.1"
-niworkflows = "^1.11.0"
-matplotlib = "^3.10.1"
-niftifixer = {git = "https://github.com/openneuropet/nifti_fixer.git"}
-bids-validator-deno = "^2.0.5"
-nipreps = "^1.0"
-nireports = "^25.2.0"
-nibabel = "^5.3.2"
-nilearn = "^0.10.4"
-numpy = "^2.1.3"
-scipy = "^1.14.1"
-seaborn = "^0.13.2"
-pillow = "^11.0.0"
-imageio = "^2.36.0"
-
-
-[tool.poetry.group.dev.dependencies]
-black = "^23.7.0"
-flake8 = "^6.1.0"
-isort = "^5.12.0"
-pre-commit = "^3.3.3"
-pytest = "^7.4.2"
-sphinx = "^7.2.6"
-sphinx-rtd-theme = "^3.0.1"
-jupyterlab = "^4.4.1"
-notebook = "^7.4.1"
-nbconvert = "^7.16.6"
-ipywidgets = "^8.1.6"
-matplotlib = "^3.10.1"
-pandas = "^2.2.3"
-pyqt6 = "^6.9.0"
 
 [tool.isort]
 profile = "black"
@@ -59,11 +59,11 @@ force_single_line = true
 lines_after_imports = 2
 
 [build-system]
-requires = ["poetry-core", "setuptools>=61.0"]
-build-backend = "poetry.core.masonry.api"
+requires = ["setuptools>=68.1.2", "wheel"]
+build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-package-data = { "petdeface" = [ "data/sub-01/ses-baseline/anat/*.nii", "data/sub-01/ses-baseline/anat/*.json", "data/sub-mni305/anat/sub-mni305_T1w.nii.gz", "data/sub-mni305/anat/sub-mni305_T1w.json"]}
-
-[tool.poetry.scripts]
-petdeface = 'petdeface.petdeface:main'
+packages = ["petdeface"]
+include-package-data = false
+package-data = { "petdeface" = ["data/sub-01/**/*T1w.nii", "data/sub-01/**/*T1w.nii.gz", "data/sub-01/**/*T1w.json", "data/sub-mni305/**/*T1w.nii", "data/sub-mni305/**/*T1w.nii.gz", "data/sub-mni305/**/*T1w.json"] }
+exclude-package-data = { "petdeface" = ["data/sub-02/**/*"] }
