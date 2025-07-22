@@ -14,7 +14,7 @@ from platform import system
 import subprocess
 from typing import Union
 
-from nipype.interfaces.freesurfer import MRICoreg
+from nipype.interfaces.freesurfer import MRICoreg, ApplyVolTransform
 from nipype.interfaces.io import DataSink
 from nipype.interfaces.base.traits_extension import File as traits_extensionFile
 from nipype.pipeline import Node
@@ -482,12 +482,37 @@ def init_single_subject_wf(
 
             coreg_pet_to_t1w = Node(mricoreg, "coreg_pet_to_t1w")
 
+            # warp pet image to T1w space for later QA
+            warp_pet_to_t1w_space = Node(ApplyVolTransform(), "warp_pet_to_t1w_space")
+            warp_pet_to_t1w_space.inputs.target_file = t1w_file
+
+            # warp defaced pet image to T1w space for QA comparison
+            warp_defaced_pet_to_t1w_space = Node(
+                ApplyVolTransform(), "warp_defaced_pet_to_t1w_space"
+            )
+            warp_defaced_pet_to_t1w_space.inputs.target_file = t1w_file
+
+            # weighted average of the defaced PET image (4D -> 3D) using timing from original PET
+            # Use the modified WeightedAverage interface with the original PET's sidecar
+            weighted_average_defaced = Node(
+                WeightedAverage(pet_file=pet_file), name="weighted_average_defaced"
+            )
+            # Set the original PET file as the sidecar source for timing info
+            weighted_average_defaced.inputs.sidecar_file = pet_file
+
             deface_pet = Node(ApplyMideface(in_file=pet_file), name="deface_pet")
 
+            # Connect all the nodes in the PET workflow
             pet_wf.connect(
                 [
+                    # Connection 1: weighted_average -> coreg_pet_to_t1w
+                    # Takes the averaged PET image and feeds it as the source for registration
                     (weighted_average, coreg_pet_to_t1w, [("out_file", "source_file")]),
+                    # Connection 2: coreg_pet_to_t1w -> deface_pet
+                    # Takes the registration matrix (LTA file) and feeds it to the defacing node
                     (coreg_pet_to_t1w, deface_pet, [("out_lta_file", "lta_file")]),
+                    # Connection 3: coreg_pet_to_t1w -> datasink
+                    # Saves the registration matrix (LTA file) to the output directory
                     (
                         coreg_pet_to_t1w,
                         datasink,
@@ -498,6 +523,34 @@ def init_single_subject_wf(
                             )
                         ],
                     ),
+                    # Connection 4: weighted_average -> warp_pet_to_t1w_space
+                    # Takes the averaged PET image and feeds it as the source for warping to T1w space
+                    (
+                        weighted_average,
+                        warp_pet_to_t1w_space,
+                        [("out_file", "source_file")],
+                    ),
+                    # Connection 5: coreg_pet_to_t1w -> warp_pet_to_t1w_space
+                    # Takes the registration matrix and feeds it as the transformation for warping
+                    (
+                        coreg_pet_to_t1w,
+                        warp_pet_to_t1w_space,
+                        [("out_lta_file", "reg_file")],
+                    ),
+                    # Connection 6: warp_pet_to_t1w_space -> datasink
+                    # Saves the PET image warped to T1w space for QA purposes
+                    (
+                        warp_pet_to_t1w_space,
+                        datasink,
+                        [
+                            (
+                                "transformed_file",
+                                f"{pet_string.replace('_', '.')}.pet.@warped{run_id}",
+                            )
+                        ],
+                    ),
+                    # Connection 7: deface_pet -> datasink
+                    # Saves the final defaced PET image to the output directory
                     (
                         deface_pet,
                         datasink,
@@ -508,17 +561,56 @@ def init_single_subject_wf(
                             )
                         ],
                     ),
+                    # Connection 8: deface_pet -> weighted_average_defaced
+                    # Takes the defaced PET image (4D) and feeds it to weighted averaging
+                    (
+                        deface_pet,
+                        weighted_average_defaced,
+                        [("out_file", "pet_file")],
+                    ),
+                    # Connection 9: weighted_average_defaced -> warp_defaced_pet_to_t1w_space
+                    # Takes the weighted averaged defaced PET image (3D) and feeds it as the source for warping
+                    (
+                        weighted_average_defaced,
+                        warp_defaced_pet_to_t1w_space,
+                        [("out_file", "source_file")],
+                    ),
+                    # Connection 10: coreg_pet_to_t1w -> warp_defaced_pet_to_t1w_space
+                    # Takes the registration matrix and feeds it as the transformation for warping defaced PET
+                    (
+                        coreg_pet_to_t1w,
+                        warp_defaced_pet_to_t1w_space,
+                        [("out_lta_file", "reg_file")],
+                    ),
+                    # Connection 11: warp_defaced_pet_to_t1w_space -> datasink
+                    # Saves the defaced PET image warped to T1w space for QA comparison
+                    (
+                        warp_defaced_pet_to_t1w_space,
+                        datasink,
+                        [
+                            (
+                                "transformed_file",
+                                f"{pet_string.replace('_', '.')}.pet.@defaced_warped{run_id}",
+                            )
+                        ],
+                    ),
                 ]
             )
 
+            # Connect the T1w workflow to the PET workflow
+            # This connects the facemask from the T1w defacing to the PET defacing
             workflow.connect(
                 [
                     (
-                        t1w_workflows[t1w_file]["workflow"],
-                        pet_wf,
+                        t1w_workflows[t1w_file][
+                            "workflow"
+                        ],  # Source: T1w defacing workflow
+                        pet_wf,  # Target: PET workflow
                         [
                             (
+                                # Output from T1w defacing: the facemask file
                                 f"deface_t1w_{t1w_workflows[t1w_file]['anat_string']}.out_facemask",
+                                # Input to PET defacing: the facemask file (same mask used for both T1w and PET)
                                 "deface_pet.facemask",
                             )
                         ],
@@ -1293,7 +1385,7 @@ def main():  # noqa: max-complexity: 12
                     " ".join(args.participant_label) if args.participant_label else None
                 ),
                 open_browser=args.open_browser,
-                defacing_method="default"
+                defacing_method="default",
             )
 
             print("\n" + "=" * 60)

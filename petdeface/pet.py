@@ -12,6 +12,11 @@ from niworkflows.interfaces.bids import ReadSidecarJSON
 
 class WeightedAverageInputSpec(BaseInterfaceInputSpec):
     pet_file = File(exists=True, desc="Dynamic PET", mandatory=True)
+    sidecar_file = File(
+        exists=True,
+        desc="Optional sidecar JSON file for timing info. If not provided, uses sidecar from pet_file.",
+        mandatory=False,
+    )
 
 
 class WeightedAverageOutputSpec(TraitedSpec):
@@ -47,9 +52,18 @@ class WeightedAverage(BaseInterface):
         img = nib.load(pet_file)
         data = img.get_fdata()
 
-        meta = ReadSidecarJSON(
-            in_file=pet_file, bids_dir=bids_dir, bids_validate=False
-        ).run()
+        # Use optional sidecar file if provided, otherwise use pet_file's sidecar
+        if hasattr(self.inputs, "sidecar_file") and self.inputs.sidecar_file:
+            sidecar_file = self.inputs.sidecar_file
+            sidecar_bids_dir = os.path.dirname(sidecar_file)
+            meta = ReadSidecarJSON(
+                in_file=sidecar_file, bids_dir=sidecar_bids_dir, bids_validate=False
+            ).run()
+        else:
+            # Default behavior: use pet_file's sidecar
+            meta = ReadSidecarJSON(
+                in_file=pet_file, bids_dir=bids_dir, bids_validate=False
+            ).run()
 
         frames_start = np.array(meta.outputs.out_dict["FrameTimesStart"])
         frames_duration = np.array(meta.outputs.out_dict["FrameDuration"])
