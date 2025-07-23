@@ -22,6 +22,7 @@ from niworkflows.engine.workflows import LiterateWorkflow as Workflow
 from niworkflows.utils.bids import collect_data
 from niworkflows.utils.bids import collect_participants
 from niworkflows.utils.misc import check_valid_fs_license
+from nireports.interfaces.reporting.base import SimpleBeforeAfterRPT
 
 from petutils.petutils import collect_anat_and_pet
 from importlib.metadata import version
@@ -502,6 +503,33 @@ def init_single_subject_wf(
 
             deface_pet = Node(ApplyMideface(in_file=pet_file), name="deface_pet")
 
+            # create simple before and after reports
+            t1w_before_after_report = Node(
+                SimpleBeforeAfterRPT(
+                    before_label="Faced T1w",
+                    after_label="Defaced T1w",
+                    out_report=f"{anat_string}_before_after.svg"
+                ),
+                name=f"{anat_string}_before_and_after_report"
+            )
+            
+            t1w_before_after_report.inputs.before = t1w_file
+
+            pet_before_and_after_report = Node(
+                SimpleBeforeAfterRPT(
+                    before_label=f"Faced {pet_string}",
+                    after_label=f"Defaced {pet_string}",
+                    out_report=f"{pet_string}_before_after.svg"
+                ),
+                name=f"{pet_string}_before_and_after_report")
+            pet_to_t1w_coregistration = Node(
+                SimpleBeforeAfterRPT(
+                    before_label=f"{pet_string}",
+                    after_label=f"{anat_string}",
+                    out_report=f"{pet_string}_registration_to_t1w.svg"
+                ),
+                name=f"{pet_string}_to_{anat_string}_registration")
+
             # Connect all the nodes in the PET workflow
             pet_wf.connect(
                 [
@@ -594,6 +622,34 @@ def init_single_subject_wf(
                             )
                         ],
                     ),
+                    # create simple before and after report for pet image
+                    (
+                        warp_pet_to_t1w_space,
+                        pet_before_and_after_report,
+                        [("transformed_file", "before")]
+                    ),
+                    (
+                        warp_defaced_pet_to_t1w_space,
+                        pet_before_and_after_report,
+                        [("transformed_file", "after")]
+                    ),
+                    # create a simple report showing the registration for pet
+                    (
+                        warp_defaced_pet_to_t1w_space,
+                        pet_to_t1w_coregistration,
+                        [("transformed_file", "before")]
+                    ),
+                    (
+                        t1w_workflows[t1w_file]["workflow"].get_node(f"deface_t1w_{t1w_workflows[t1w_file]['anat_string']}"),
+                        pet_to_t1w_coregistration,
+                        [("out_file", "after")]
+                    ),
+                    # create a before and after image for the t1w defacing
+                    (
+                        t1w_workflows[t1w_file]["workflow"].get_node(f"deface_t1w_{t1w_workflows[t1w_file]['anat_string']}"),
+                        t1w_before_after_report,
+                        [("out_file", "after")]
+                    )
                 ]
             )
 
