@@ -1254,6 +1254,12 @@ def cli():
         default=False,
         help="Open browser automatically after QA report generation",
     )
+    parser.add_argument(
+        "--qa-port",
+        type=int,
+        default=8000,
+        help="User can manually choose a default port to serve the nifti images at for 3D previewing of defacing should the default value of 8000 not work.",
+    )
 
     arguments = parser.parse_args()
     return arguments
@@ -1474,10 +1480,12 @@ def main():  # noqa: max-complexity: 12
                     else args.bids_dir / "derivatives" / "petdeface"
                 )
 
-            # Run QA
+            # Run QA with server if open_browser is requested
             qa_result = run_qa(
                 defaced_dir=str(args.bids_dir),
                 open_browser=args.open_browser,
+                start_server=args.open_browser,  # Start server when opening browser
+                server_port=args.qa_port,
             )
 
             print("\n" + "=" * 60)
