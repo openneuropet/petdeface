@@ -123,6 +123,10 @@ options:
                         Select only a specific session(s) to include in the defacing workflow
   --session_label_exclude session_label_exclude [session_label_exclude ...]
                         Select a specific session(s) to exclude from the defacing workflow
+  --use_template_anat   Use template anatomical image when no T1w is available for PET scans. 
+                        Options: 't1' (included T1w template), 'mni' (MNI template), or 'pet' 
+                        (averaged PET image).
+  --open_browser        Following defacing this flag will open the browser to view the defacing results
 
 Docker Based
 ------------
@@ -175,3 +179,30 @@ to the container by checking `FREESURFER_HOME`  and `FREESURFER_LICENSE` environ
 receive an error message relating to the FreeSurfer license file, try setting and exporting the 
 `FREESURFER_LICENSE` environment variable to the location of the FreeSurfer license file on the host 
 machine.
+
+Template Anatomical Images
+-------------------------
+
+When PET scans lack corresponding T1w anatomical images, PETdeface can use template anatomical images for 
+registration and defacing. Three options are available:
+
+- **`--use_template_anat t1`**: Uses a T1w template included with the PETdeface library
+- **`--use_template_anat mni`**: Uses the MNI standard brain template  
+- **`--use_template_anat pet`**: Creates a template by averaging a subjects PET image and using that averaged image in place of a T1 image 
+
+**Important**: When using template anatomical images, it's crucial to validate the defacing quality. 
+Inspect the output using the generated HTML report (with `--open_browser`) or a NIfTI viewer to ensure 
+the defacing is valid for your data.
+
+**Recommended workflow for subjects missing T1w images**:
+
+1. First, exclude subjects missing T1w using `--participant_label_exclude`
+2. Run defacing on subjects with T1w images  
+3. Then run defacing separately on subjects missing T1w using `--participant_label` and test 
+   different templates (`t1`, `mni`, `pet`) to determine which works best for your data
+
+Example usage with template anatomical:
+
+.. code-block:: bash
+
+    petdeface /inputfolder /outputfolder --use_template_anat t1 --n_procs 16

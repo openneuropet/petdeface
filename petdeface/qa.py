@@ -16,6 +16,23 @@ import subprocess
 import signal
 from pathlib import Path
 
+# Handle imports for both script and module execution (including debugger)
+is_script = (
+    __name__ == "__main__"
+    or len(sys.argv) > 0
+    and sys.argv[0].endswith("qa.py")
+    or "debugpy" in sys.modules
+)
+
+if is_script:
+    # Running as script - add current directory to path for local imports
+    current_dir = Path(__file__).parent
+    if str(current_dir) not in sys.path:
+        sys.path.insert(0, str(current_dir))
+
+# Import nireports - this should work in both script and module mode
+from nireports.interfaces.reporting.base import SimpleBeforeAfterRPT
+
 
 def collect_svg_reports(defaced_dir, output_dir):
     """Collect SVG files from derivatives/petdeface directory."""
@@ -26,6 +43,7 @@ def collect_svg_reports(defaced_dir, output_dir):
         )
         print("Looking for SVG files in the main defaced directory...")
         derivatives_dir = defaced_dir
+
 
     # Find all SVG files recursively, excluding the qa directory
     svg_files = []
@@ -745,7 +763,7 @@ def run_qa(
 </html>
 """
 
-    index_file = os.path.join(output_dir, "index.html")
+    index_file = os.path.join(output_dir, "petdeface_report.html")
     with open(index_file, "w") as f:
         f.write(index_html)
 

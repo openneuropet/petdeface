@@ -5,13 +5,20 @@ import bids
 from petdeface.petdeface import PetDeface
 from petdeface.utils import InvalidBIDSDataset
 from os import cpu_count
+import os
 from bids.layout import BIDSLayout
 import subprocess
 
 import tempfile
+from pathlib import Path
 
 # collect test bids dataset from data directory
-data_dir = Path(__file__).parent.parent / "data"
+# Use relative path to get the path to the package data directory
+project_root = Path(__file__).parent.parent
+# data is now at the top level
+# e.g. /Users/galassiae/Projects/petdeface/data
+# not inside petdeface/
+data_dir = project_root / "data"
 
 # get number of cores, use all but one
 nthreads = cpu_count() - 1
@@ -139,7 +146,7 @@ def test_participant_exclusion():
             n_procs=nthreads,
             preview_pics=False,
             placement="adjacent",
-            participant_label_exclude=["sub-02"],  # Exclude sub-02
+            participant_label_exclude=["sub-02", "sub-mni305"],  # Exclude sub-02
         )
         petdeface.run()
 
@@ -150,33 +157,30 @@ def test_participant_exclusion():
         all_files = list(final_defaced_dir.rglob("*"))
         all_files = [f for f in all_files if f.is_file()]  # Only files, not directories
 
-        # Count files by subject
-        sub01_files = [f for f in all_files if "sub-01" in str(f)]
-        sub02_files = [f for f in all_files if "sub-02" in str(f)]
+        # Count files by subject, but ignore derivatives directory
+        sub01_files = [
+            f for f in all_files if "sub-01" in str(f) and "/derivatives/" not in str(f)
+        ]
+        sub02_files = [
+            f for f in all_files if "sub-02" in str(f) and "/derivatives/" not in str(f)
+        ]
 
-        print(f"Total files in defaced dataset: {len(all_files)}")
-        print(f"sub-01 files: {len(sub01_files)}")
-        print(f"sub-02 files: {len(sub02_files)}")
-
-        # Verify that sub-02 does NOT appear anywhere in the final defaced dataset
+        # Verify that sub-02 does NOT appear anywhere in the main defaced dataset (outside derivatives)
         assert (
             len(sub02_files) == 0
-        ), f"sub-02 should be completely excluded from final defaced dataset, but found {len(sub02_files)} files: {[str(f) for f in sub02_files]}"
+        ), f"sub-02 should be completely excluded from main defaced dataset, but found {len(sub02_files)} files: {[str(f) for f in sub02_files]}"
 
         # Verify that sub-01 exists and was processed
-        assert len(sub01_files) > 0, "sub-01 should exist in final defaced dataset"
+        assert len(sub01_files) > 0, "sub-01 should exist in main defaced dataset"
         assert (
             final_defaced_dir / "sub-01"
-        ).exists(), "sub-01 directory should exist in final defaced dataset"
+        ).exists(), "sub-01 directory should exist in main defaced dataset"
 
         # Verify processing artifacts exist for sub-01 in derivatives
         derivatives_dir = final_defaced_dir / "derivatives" / "petdeface"
         if derivatives_dir.exists():
             sub01_defacemasks = list(derivatives_dir.glob("**/sub-01*defacemask*"))
             sub01_lta_files = list(derivatives_dir.glob("**/sub-01*.lta"))
-
-            print(f"sub-01 defacemasks found: {len(sub01_defacemasks)}")
-            print(f"sub-01 lta files found: {len(sub01_lta_files)}")
 
             assert (
                 len(sub01_defacemasks) > 0

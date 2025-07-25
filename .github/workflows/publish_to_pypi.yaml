@@ -1,0 +1,43 @@
+name: Publish to PyPI
+
+on:
+  push:
+    tags:
+      - '**'
+  workflow_call:
+  workflow_dispatch:
+    inputs:
+      debug_enabled:
+        type: boolean
+        description: 'Run the build with tmate debugging enabled (https://github.com/marketplace/actions/debugging-with-tmate)'
+        required: false
+        default: false
+
+env:
+  PYPI_TOKEN: ${{ secrets.PYPI_TOKEN_PETDEFACE }}
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
+        with:
+          python-version: 3.11
+      - name: Build Package
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+          uv sync --dev
+          uv build
+
+      - name: Check PyPI token
+        run: |
+          if [ -z "$PYPI_TOKEN" ]; then
+            echo "Error: PYPI_TOKEN_PETDEFACE is not set or is empty check your secrets"
+            exit 1
+          fi
+
+      - name: Publish Package
+        run: |
+          uv publish --token $PYPI_TOKEN
