@@ -53,3 +53,4 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry.scripts]
 petdeface = 'petdeface.petdeface:main'
+petdeface-qa = 'petdeface.qa:main'
