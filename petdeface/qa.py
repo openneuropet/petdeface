@@ -7,7 +7,6 @@ import os
 import glob
 import argparse
 import webbrowser
-import shutil
 from pathlib import Path
 
 
@@ -21,8 +20,14 @@ def collect_svg_reports(defaced_dir, output_dir):
         print("Looking for SVG files in the main defaced directory...")
         derivatives_dir = defaced_dir
 
-    # Find all SVG files recursively
-    svg_files = glob.glob(os.path.join(derivatives_dir, "**", "*.svg"), recursive=True)
+    # Find all SVG files recursively, excluding the qa directory
+    svg_files = []
+    for svg_file in glob.glob(
+        os.path.join(derivatives_dir, "**", "*.svg"), recursive=True
+    ):
+        # Skip files in the qa directory
+        if "qa" not in svg_file:
+            svg_files.append(svg_file)
 
     if not svg_files:
         print("No SVG files found!")
@@ -30,19 +35,11 @@ def collect_svg_reports(defaced_dir, output_dir):
 
     print(f"Found {len(svg_files)} SVG files")
 
-    # Copy SVG files to output directory
-    images_dir = os.path.join(output_dir, "images")
-    os.makedirs(images_dir, exist_ok=True)
-
-    copied_files = []
+    # Just return the original file paths - no copying needed
     for svg_file in svg_files:
-        filename = os.path.basename(svg_file)
-        dest_path = os.path.join(images_dir, filename)
-        shutil.copy2(svg_file, dest_path)
-        copied_files.append(dest_path)
-        print(f"Copied: {filename}")
+        print(f"Found: {Path(svg_file).name}")
 
-    return copied_files
+    return svg_files
 
 
 def create_simple_viewer_html(svg_files, output_dir):
@@ -146,7 +143,7 @@ def run_qa(defaced_dir, output_dir=None, open_browser=False):
 
     Args:
         defaced_dir (str): Path to defaced dataset directory (containing derivatives/petdeface)
-        output_dir (str, optional): Output directory for HTML files
+        output_dir (str, optional): Output directory for HTML files (defaults to derivatives/petdeface/qa/)
         open_browser (bool): Whether to open browser automatically
 
     Returns:
@@ -154,12 +151,31 @@ def run_qa(defaced_dir, output_dir=None, open_browser=False):
     """
     defaced_dir = os.path.abspath(defaced_dir)
 
-    # Create output directory name
+    # Create output directory in derivatives/petdeface/qa/
     if output_dir:
         output_dir = os.path.abspath(output_dir)
     else:
-        dataset_name = os.path.basename(defaced_dir)
-        output_dir = os.path.abspath(f"{dataset_name}_svg_qa")
+        # Look for derivatives/petdeface directory
+        derivatives_dir = os.path.join(defaced_dir, "derivatives", "petdeface")
+        if not os.path.exists(derivatives_dir):
+            print(
+                f"Warning: derivatives/petdeface directory not found at {derivatives_dir}"
+            )
+            print("Looking for derivatives directory in parent...")
+            # Try parent directory (in case defaced_dir is the derivatives folder)
+            derivatives_dir = os.path.join(
+                os.path.dirname(defaced_dir), "derivatives", "petdeface"
+            )
+            if not os.path.exists(derivatives_dir):
+                print(
+                    f"Warning: derivatives/petdeface directory not found at {derivatives_dir}"
+                )
+                print("Creating QA output in current directory...")
+                output_dir = os.path.abspath("qa_reports")
+            else:
+                output_dir = os.path.join(derivatives_dir, "qa")
+        else:
+            output_dir = os.path.join(derivatives_dir, "qa")
 
     # Create output directory
     os.makedirs(output_dir, exist_ok=True)

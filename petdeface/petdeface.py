@@ -843,10 +843,6 @@ def wrap_up_defacing(
             shutil.rmtree(output_dir)
         pathlib.Path(output_dir).mkdir(parents=True, exist_ok=True, mode=0o775)
 
-    # collect all svg images and place them into a qa folder
-    svg_report_files = glob.glob(f"{path_to_dataset}/**/*.svg", recursive=True)
-    warped_files = glob.glob(f"{path_to_dataset}/**/*warped*", recursive=True)
-
     # create dictionary of original images and defaced images
     mapping_dict = {}
     for defaced in defacing_files:
@@ -1480,13 +1476,8 @@ def main():  # noqa: max-complexity: 12
 
             # Run QA
             qa_result = run_qa(
-                faced_dir=str(args.bids_dir),
-                defaced_dir=str(defaced_dir),
-                subject=(
-                    " ".join(args.participant_label) if args.participant_label else None
-                ),
+                defaced_dir=str(args.bids_dir),
                 open_browser=args.open_browser,
-                defacing_method="default",
             )
 
             print("\n" + "=" * 60)
