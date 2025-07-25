@@ -381,9 +381,10 @@ def init_single_subject_wf(
     datasink.inputs.substitutions = [
         (".face-after", "_desc-faceafter_T1w"),
         (".face-before", "_desc-facebefore_T1w"),
-        (".anat.@beforeafter", "_desc-beforeafter_T1w.svg"),
-        (".pet.@beforeafter", "_desc-beforeafter_pet.svg"),
-        (".pet.@registration", "_desc-petregistration_pet.svg"),
+        # Fix SVG naming to match actual file names
+        ("_t1w_before_after.svg", "_desc-beforeafter_T1w.svg"),
+        ("_pet_before_after.svg", "_desc-beforeafter_pet.svg"),
+        ("_registration_to_t1w.svg", "_desc-petregistration_pet.svg"),
     ]
 
     # deface t1w(s)
@@ -511,7 +512,7 @@ def init_single_subject_wf(
                 SimpleBeforeAfterRPT(
                     before_label="Faced T1w",
                     after_label="Defaced T1w",
-                    out_report=f"{anat_string}_before_after.svg",
+                    out_report=f"{anat_string}_t1w_before_after.svg",
                 ),
                 name=f"{anat_string}_before_and_after_report",
             )
@@ -522,7 +523,7 @@ def init_single_subject_wf(
                 SimpleBeforeAfterRPT(
                     before_label=f"Faced {pet_string}",
                     after_label=f"Defaced {pet_string}",
-                    out_report=f"{pet_string}_before_after.svg",
+                    out_report=f"{pet_string}_pet_before_after.svg",
                 ),
                 name=f"{pet_string}_before_and_after_report",
             )
