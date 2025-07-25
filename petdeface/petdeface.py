@@ -381,6 +381,9 @@ def init_single_subject_wf(
     datasink.inputs.substitutions = [
         (".face-after", "_desc-faceafter_T1w"),
         (".face-before", "_desc-facebefore_T1w"),
+        (".anat.@beforeafter", "_desc-beforeafter_T1w.svg"),
+        (".pet.@beforeafter", "_desc-beforeafter_pet.svg"),
+        (".pet.@registration", "_desc-petregistration_pet.svg"),
     ]
 
     # deface t1w(s)
@@ -508,27 +511,29 @@ def init_single_subject_wf(
                 SimpleBeforeAfterRPT(
                     before_label="Faced T1w",
                     after_label="Defaced T1w",
-                    out_report=f"{anat_string}_before_after.svg"
+                    out_report=f"{anat_string}_before_after.svg",
                 ),
-                name=f"{anat_string}_before_and_after_report"
+                name=f"{anat_string}_before_and_after_report",
             )
-            
+
             t1w_before_after_report.inputs.before = t1w_file
 
             pet_before_and_after_report = Node(
                 SimpleBeforeAfterRPT(
                     before_label=f"Faced {pet_string}",
                     after_label=f"Defaced {pet_string}",
-                    out_report=f"{pet_string}_before_after.svg"
+                    out_report=f"{pet_string}_before_after.svg",
                 ),
-                name=f"{pet_string}_before_and_after_report")
+                name=f"{pet_string}_before_and_after_report",
+            )
             pet_to_t1w_coregistration = Node(
                 SimpleBeforeAfterRPT(
                     before_label=f"{pet_string}",
                     after_label=f"{anat_string}",
-                    out_report=f"{pet_string}_registration_to_t1w.svg"
+                    out_report=f"{pet_string}_registration_to_t1w.svg",
                 ),
-                name=f"{pet_string}_to_{anat_string}_registration")
+                name=f"{pet_string}_to_{anat_string}_registration",
+            )
 
             # Connect all the nodes in the PET workflow
             pet_wf.connect(
@@ -626,30 +631,65 @@ def init_single_subject_wf(
                     (
                         warp_pet_to_t1w_space,
                         pet_before_and_after_report,
-                        [("transformed_file", "before")]
+                        [("transformed_file", "before")],
                     ),
                     (
                         warp_defaced_pet_to_t1w_space,
                         pet_before_and_after_report,
-                        [("transformed_file", "after")]
+                        [("transformed_file", "after")],
                     ),
                     # create a simple report showing the registration for pet
                     (
                         warp_defaced_pet_to_t1w_space,
                         pet_to_t1w_coregistration,
-                        [("transformed_file", "before")]
+                        [("transformed_file", "before")],
                     ),
                     (
-                        t1w_workflows[t1w_file]["workflow"].get_node(f"deface_t1w_{t1w_workflows[t1w_file]['anat_string']}"),
+                        t1w_workflows[t1w_file]["workflow"].get_node(
+                            f"deface_t1w_{t1w_workflows[t1w_file]['anat_string']}"
+                        ),
                         pet_to_t1w_coregistration,
-                        [("out_file", "after")]
+                        [("out_file", "after")],
                     ),
                     # create a before and after image for the t1w defacing
                     (
-                        t1w_workflows[t1w_file]["workflow"].get_node(f"deface_t1w_{t1w_workflows[t1w_file]['anat_string']}"),
+                        t1w_workflows[t1w_file]["workflow"].get_node(
+                            f"deface_t1w_{t1w_workflows[t1w_file]['anat_string']}"
+                        ),
                         t1w_before_after_report,
-                        [("out_file", "after")]
-                    )
+                        [("out_file", "after")],
+                    ),
+                    # Move svg reports to datasink
+                    (
+                        pet_before_and_after_report,
+                        datasink,
+                        [
+                            (
+                                "out_report",
+                                f"{pet_string.replace('_','.')}.pet.@beforeafter{run_id}",
+                            )
+                        ],
+                    ),
+                    (
+                        pet_to_t1w_coregistration,
+                        datasink,
+                        [
+                            (
+                                "out_report",
+                                f"{pet_string.replace('_', '.')}.pet.@registration{run_id}",
+                            )
+                        ],
+                    ),
+                    (
+                        t1w_before_after_report,
+                        datasink,
+                        [
+                            (
+                                "out_report",
+                                f"{anat_string.replace('_', '.')}.anat.@beforeafter{run_id}",
+                            )
+                        ],
+                    ),
                 ]
             )
 
@@ -801,6 +841,10 @@ def wrap_up_defacing(
         if os.path.exists(output_dir):
             shutil.rmtree(output_dir)
         pathlib.Path(output_dir).mkdir(parents=True, exist_ok=True, mode=0o775)
+
+    # collect all svg images and place them into a qa folder
+    svg_report_files = glob.glob(f"{path_to_dataset}/**/*.svg", recursive=True)
+    warped_files = glob.glob(f"{path_to_dataset}/**/*warped*", recursive=True)
 
     # create dictionary of original images and defaced images
     mapping_dict = {}
