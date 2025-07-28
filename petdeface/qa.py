@@ -43,7 +43,6 @@ def collect_svg_reports(defaced_dir, output_dir):
         print("Looking for SVG files in the main defaced directory...")
         derivatives_dir = defaced_dir
 
-
     # Find all SVG files recursively, excluding the qa directory
     svg_files = []
     for svg_file in glob.glob(
@@ -754,7 +753,7 @@ def run_qa(
                 
                 // Show command help
                 commandHelp.style.display = 'block';
-                const command = `petdeface-qa --defaced-dir "${{defacedDir}}" --start-server --open-browser`;
+                const command = `petdeface-qa "${{defacedDir}}" --start-server --open-browser`;
                 commandText.textContent = command;
                 
                 // Disable all NIfTI links
@@ -843,15 +842,13 @@ def main():
         description="Generate SVG QA reports for PET deface workflow."
     )
     parser.add_argument(
-        "--defaced-dir",
-        "--defaced_dir",
-        required=True,
-        help="Directory for defaced dataset (containing derivatives/petdeface)",
+        "bids_dir",
+        help="BIDS directory containing the defaced dataset (with derivatives/petdeface)",
     )
     parser.add_argument(
         "--output-dir",
         "--output_dir",
-        help="Output directory for HTML files (default: {dataset_name}_svg_qa)",
+        help="Output directory for HTML files (default: derivatives/petdeface/qa/)",
     )
     parser.add_argument(
         "--open-browser",
@@ -876,7 +873,7 @@ def main():
     args = parser.parse_args()
 
     return run_qa(
-        defaced_dir=args.defaced_dir,
+        defaced_dir=args.bids_dir,
         output_dir=args.output_dir,
         open_browser=args.open_browser,
         start_server=args.start_server,

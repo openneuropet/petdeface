@@ -1606,13 +1606,13 @@ def main():  # noqa: max-complexity: 12
             print(f"Reports available at: {qa_result['output_dir']}")
             print("=" * 60)
 
-
         except Exception as e:
             print(f"\nError generating QA reports: {e}")
             print("QA report generation failed, but defacing completed successfully.")
 
         print("launch QA reports with:")
-        print(f"petdeface-qa --defaced_dir {args.bids_dir} --open_browser --start_server")
+        print(f"petdeface-qa {args.bids_dir} --open_browser --start_server")
+
 
 if __name__ == "__main__":
     main()
