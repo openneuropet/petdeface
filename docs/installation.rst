@@ -9,11 +9,22 @@ PETdeface can be installed via PyPi_::
 
     pip install petdeface
 
-Or cloned and installed from source::
+Or cloned and installed from source (using UV)::
 
     git clone https://github.com/openneuropet/petdeface.git
     cd petdeface
-    poetry build
+    uv build
+    pip install dist/petdeface-<X.X.X>-py3-none-any.whl 
+    # where X.X.X is the version number of the generated file
+
+Or cloned and installed from source (using pip and python)::
+
+    git clone https://github.com/openneuropet/petdeface.git
+    cd petdeface
+    pip install --upgrade pip
+    pip install .[dev]
+    pip install build
+    python -m build
     pip install dist/petdeface-<X.X.X>-py3-none-any.whl 
     # where X.X.X is the version number of the generated file
 

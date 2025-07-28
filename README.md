@@ -14,6 +14,9 @@ This software can be installed via source or via pip from PyPi with `pip install
 |---------| ------ |
 | `docker build . -t petdeface` | ![docker_build](https://codebuild.us-east-1.amazonaws.com/badges?uuid=eyJlbmNyeXB0ZWREYXRhIjoiYzdXV0tYSkQzTVNkcG04cHA2S055UXlKRlZTU1VONThUMVRoZVcwU3l1aHFhdVBlNDNaRGVCYzdWM1Q0WjYzQ1lRU2ZTSHpmSERPWFRkVXVyb3k3RTZBPSIsIml2UGFyYW1ldGVyU3BlYyI6IjRCZFFIQnNGT2lKcDA1VG4iLCJtYXRlcmlhbFNldFNlcmlhbCI6MX0%3D&branch=main) |
 | `docker push` | ![docker push icon](https://codebuild.us-east-1.amazonaws.com/badges?uuid=eyJlbmNyeXB0ZWREYXRhIjoia0c1bEJYUGI2SXlWYi9JMm1tcGtiYWVTdVd3bmlnOUFaTjN4QjJITU5PTVpvQnN3TlowajhxNmhHY2RwQ2Z5SU93OExqc2xvMzFnTHFvajlqVk1MV2FzPSIsIml2UGFyYW1ldGVyU3BlYyI6Ikl6SzRyc1RabzBnSkplTjciLCJtYXRlcmlhbFNldFNlcmlhbCI6MX0%3D&branch=main) |
+| `Python 3.14 >= 3.10` | [![Check Python Compatibility](https://github.com/openneuropet/petdeface/actions/workflows/check_python_compatibility.yaml/badge.svg)](https://github.com/openneuropet/petdeface/actions/workflows/check_python_compatibility.yaml) |
+| `packaging` | [![Publish to PyPI](https://github.com/openneuropet/petdeface/actions/workflows/publish_to_pypi.yaml/badge.svg)](https://github.com/openneuropet/petdeface/actions/workflows/publish_to_pypi.yaml) |
+| `Docs` | ![RTD BADGE](https://app.readthedocs.org/projects/petdeface/badge/?version=latest&style=default) |
 
 ## Requirements
 
@@ -36,9 +39,9 @@ This software can be installed via source or via pip from PyPi with `pip install
 
 ```bash
 usage: petdeface.py [-h] [--anat_only] [--participant_label PARTICIPANT_LABEL [PARTICIPANT_LABEL ...]] [--docker] [--singularity] [--n_procs N_PROCS]
-                    [--skip_bids_validator] [--version] [--placement PLACEMENT] [--remove_existing] [--preview_pics]
+                    [--skip_bids_validator] [--version] [--placement PLACEMENT] [--remove_existing]
                     [--participant_label_exclude participant_label_exclude [participant_label_exclude ...]] [--session_label SESSION [SESSION ...]]
-                    [--session_label_exclude session_label_exclude [session_label_exclude ...]]
+                    [--session_label_exclude session_label_exclude [session_label_exclude ...]] [--open_browser]
                     bids_dir [output_dir] [analysis_level]
 
 PetDeface
@@ -63,21 +66,44 @@ options:
                         Where to place the defaced images. Options are 'adjacent': next to the bids_dir (default) in a folder appended with _defaced'inplace':
                         defaces the dataset in place, e.g. replaces faced PET and T1w images w/ defaced at bids_dir'derivatives': does all of the defacing within
                         the derivatives folder in bids_dir.
-  --remove_existing, -r
-                        Remove existing output files in output_dir.
-  --preview_pics        Create preview pictures of defacing, defaults to false for docker
+  --remove_existing, -r Remove existing output files in output_dir.
+  --preview_pics        Create preview pictures of defacing, defaults to false for docker (only works if FreeView is installed on machine)
   --participant_label_exclude participant_label_exclude [participant_label_exclude ...]
                         Exclude a subject(s) from the defacing workflow. e.g. --participant_label_exclude sub-01 sub-02
   --session_label SESSION [SESSION ...]
                         Select only a specific session(s) to include in the defacing workflow
   --session_label_exclude session_label_exclude [session_label_exclude ...]
                         Select a specific session(s) to exclude from the defacing workflow
+  --use_template_anat   Use template anatomical image when no T1w is available for PET scans. 
+                        Options: 't1' (included T1w template), 'mni' (MNI template), or 'pet' 
+                        (averaged PET image).
+  --open_browser        Open browser to show QA reports after completion
 ```
 
 Working example usage:
 
 ```bash
 petdeface /inputfolder /outputfolder --n_procs 16 --skip_bids_validator --placement adjacent
+```
+
+### Template Anatomical Images
+
+When PET scans lack corresponding T1w anatomical images, PETdeface can use template anatomical images for registration and defacing. Three options are available:
+
+- **`--use_template_anat t1`**: Uses a T1w template included with the PETdeface library
+- **`--use_template_anat mni`**: Uses the MNI standard brain template  
+- **`--use_template_anat pet`**: Creates a template by averaging the PET data across time
+
+**Important**: When using template anatomical images, it's crucial to validate the defacing quality. Inspect the output using the generated HTML report (with `--open_browser`) or a NIfTI viewer to ensure the defacing is valid for your data.
+
+**Recommended workflow for subjects missing T1w images**:
+1. First, exclude subjects missing T1w using `--participant_label_exclude`
+2. Run defacing on subjects with T1w images
+3. Then run defacing separately on subjects missing T1w using `--participant_label` and test different templates (`t1`, `mni`, `pet`) to determine which works best for your data
+
+Example usage with template anatomical:
+```bash
+petdeface /inputfolder /outputfolder --use_template_anat t1 --n_procs 16
 ```
 
 ### Docker Usage
@@ -138,12 +164,27 @@ trouble running this container in singularity/apptainer.
 
 ## Development
 
-This project uses poetry to package and build, to create a pip installable version of the package run:
+This project supports both [UV](https://github.com/astral-sh/uv) and standard Python (pip + build) workflows for development and packaging.
+
+### Using UV (recommended for speed)
 
 ```bash
 git clone https://github.com/openneuropet/petdeface.git
 cd petdeface
-poetry build
+uv build
+pip install dist/petdeface-<X.X.X>-py3-none-any.whl # where X.X.X is the version number of the generated file
+```
+
+### Using pip and python (no UV required)
+
+```bash
+git clone https://github.com/openneuropet/petdeface.git
+cd petdeface
+pip install --upgrade pip
+pip install .[dev]
+# To build a wheel or sdist:
+pip install build
+python -m build
 pip install dist/petdeface-<X.X.X>-py3-none-any.whl # where X.X.X is the version number of the generated file
 ```
 
