@@ -1166,6 +1166,7 @@ def cli():
         help="Only deface anatomical images",
     )
     parser.add_argument(
+        "--participant-label",
         "--participant_label",
         "-pl",
         help="The label(s) of the participant/subject to be processed. When specifying multiple subjects separate them with spaces.",
@@ -1189,11 +1190,17 @@ def cli():
         help="Run in singularity container",
     ),
     parser.add_argument(
+        "--n-procs",
         "--n_procs",
         help="Number of processors to use when running the workflow",
         default=2,
     )
-    parser.add_argument("--skip_bids_validator", action="store_true", default=False)
+    parser.add_argument(
+        "--skip-bids-validator",
+        "--skip_bids_validator",
+        action="store_true",
+        default=False,
+    )
     parser.add_argument(
         "--version",
         "-v",
@@ -1212,6 +1219,7 @@ def cli():
         default="adjacent",
     )
     parser.add_argument(
+        "--remove-existing",
         "--remove_existing",
         "-r",
         help="Remove existing output files in output_dir.",
@@ -1219,12 +1227,14 @@ def cli():
         default=False,
     )
     parser.add_argument(
+        "--preview-pics",
         "--preview_pics",
         help="Create preview pictures of defacing, defaults to false for docker",
         action="store_true",
         default=False,
     )
     parser.add_argument(
+        "--participant-label-exclude",
         "--participant_label_exclude",
         help="Exclude a subject(s) from the defacing workflow. e.g. --participant_label_exclude sub-01 sub-02",
         type=str,
@@ -1233,6 +1243,7 @@ def cli():
         default=[],
     )
     parser.add_argument(
+        "--session-label",
         "--session_label",
         help="Select only a specific session(s) to include in the defacing workflow",
         type=str,
@@ -1241,6 +1252,7 @@ def cli():
         default=[],
     )
     parser.add_argument(
+        "--session-label-exclude",
         "--session_label_exclude",
         help="Select a specific session(s) to exclude from the defacing workflow",
         type=str,
@@ -1250,12 +1262,14 @@ def cli():
     )
     parser.add_argument(
         "--open-browser",
+        "--open_browser",
         action="store_true",
         default=False,
         help="Open browser automatically after QA report generation",
     )
     parser.add_argument(
         "--qa-port",
+        "--qa_port",
         type=int,
         default=8000,
         help="User can manually choose a default port to serve the nifti images at for 3D previewing of defacing should the default value of 8000 not work.",
@@ -1493,10 +1507,13 @@ def main():  # noqa: max-complexity: 12
             print(f"Reports available at: {qa_result['output_dir']}")
             print("=" * 60)
 
+
         except Exception as e:
             print(f"\nError generating QA reports: {e}")
             print("QA report generation failed, but defacing completed successfully.")
 
+        print("launch QA reports with:")
+        print(f"petdeface-qa --defaced_dir {args.bids_dir} --open_browser --start_server")
 
 if __name__ == "__main__":
     main()

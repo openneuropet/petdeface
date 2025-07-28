@@ -799,23 +799,30 @@ def main():
     )
     parser.add_argument(
         "--defaced-dir",
+        "--defaced_dir",
         required=True,
         help="Directory for defaced dataset (containing derivatives/petdeface)",
     )
     parser.add_argument(
         "--output-dir",
+        "--output_dir",
         help="Output directory for HTML files (default: {dataset_name}_svg_qa)",
     )
     parser.add_argument(
-        "--open-browser", action="store_true", help="Open browser automatically"
+        "--open-browser",
+        "--open_browser",
+        action="store_true",
+        help="Open browser automatically",
     )
     parser.add_argument(
         "--start-server",
+        "--start_server",
         action="store_true",
         help="Start local HTTP server for NIfTI file access (required for NIfTI viewers)",
     )
     parser.add_argument(
         "--qa-port",
+        "--qa_port",
         type=int,
         default=8000,
         help="User can manually choose a default port to serve the nifti images at for 3D previewing of defacing should the default value of 8000 not work.",
