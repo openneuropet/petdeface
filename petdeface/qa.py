@@ -10,7 +10,6 @@ import webbrowser
 import json
 import http.server
 import socketserver
-import threading
 import time
 import subprocess
 import signal
@@ -183,28 +182,28 @@ def create_nifti_viewer_html(subject_id, nifti_files, output_dir, server_port=80
 
     # Create HTML content
     html_content = f"""
-<!DOCTYPE html>
+    <!DOCTYPE html>
 <html lang="en">
-<head>
-    <meta charset="utf-8">
+    <head>
+        <meta charset="utf-8">
     <title>NiiVue - {subject_id} Defaced Images</title>
-    <style>
-        body {{
-            font-family: Arial, sans-serif;
+        <style>
+            body {{
+                font-family: Arial, sans-serif;
             margin: 0;
             padding: 20px;
             background-color: #f0f0f0;
-        }}
-        .header {{
-            text-align: center;
-            margin-bottom: 30px;
+            }}
+            .header {{
+                text-align: center;
+                margin-bottom: 30px;
         }}
         .comparison-title {{
             font-size: 2.5em;
             font-weight: bold;
             margin: 20px 0;
-            color: #333;
-        }}
+                color: #333;
+            }}
         .viewers-container {{
             display: flex;
             gap: 30px;
@@ -215,18 +214,18 @@ def create_nifti_viewer_html(subject_id, nifti_files, output_dir, server_port=80
             display: flex;
             flex-direction: column;
             align-items: center;
-            background: white;
-            padding: 20px;
-            border-radius: 10px;
+                background: white;
+                padding: 20px;
+                border-radius: 10px;
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
         }}
         .viewer-title {{
             font-size: 1.5em;
             font-weight: bold;
-            margin-bottom: 15px;
+                margin-bottom: 15px;
             color: #333;
-            text-align: center;
-        }}
+                text-align: center;
+            }}
         .file-path {{
             font-size: 0.9em;
             color: #666;
@@ -237,42 +236,42 @@ def create_nifti_viewer_html(subject_id, nifti_files, output_dir, server_port=80
         }}
         canvas {{
             border: 2px solid #ddd;
-            border-radius: 5px;
+                border-radius: 5px;
         }}
         .controls {{
             margin-top: 30px;
-            text-align: center;
-        }}
+                text-align: center;
+            }}
         .slider-container {{
-            display: flex;
+                display: flex;
             align-items: center;
-            justify-content: center;
+                justify-content: center;
             gap: 15px;
-            margin-bottom: 20px;
-        }}
+                margin-bottom: 20px;
+            }}
         .slider {{
             width: 300px;
         }}
         .reset-btn {{
             padding: 10px 20px;
             background-color: #dc3545;
-            color: white;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
+                color: white;
+                border: none;
+                border-radius: 5px;
+                cursor: pointer;
             font-size: 1em;
         }}
         .reset-btn:hover {{
             background-color: #c82333;
-        }}
-    </style>
-</head>
-<body>
-    <div class="header">
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="header">
         <div class="comparison-title">{subject_id}</div>
         <div class="scan-type">Defaced NIfTI Images</div>
-    </div>
-    
+        </div>
+        
     <div class="viewers-container">
 """
 
@@ -290,16 +289,16 @@ def create_nifti_viewer_html(subject_id, nifti_files, output_dir, server_port=80
         http_url = f"http://localhost:{server_port}/{relative_path}"
 
         html_content += f"""
-        <div class="viewer">
+            <div class="viewer">
             <div class="viewer-title">{label}</div>
             <div class="file-path">{http_url}</div>
             <canvas id="gl_{subject_id}_{i}" width="640" height="640"></canvas>
         </div>
-"""
+        """
 
     html_content += (
         """
-    </div>
+        </div>
     
     <div class="controls">
         <div class="slider-container">
@@ -440,22 +439,22 @@ def create_simple_viewer_html(svg_files, output_dir):
 
     # Create HTML content
     html_content = """
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8">
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="utf-8">
     <title>PET Deface SVG Reports</title>
-    <style>
+        <style>
         body {
-            font-family: Arial, sans-serif;
-            margin: 20px;
-            background: #f5f5f5;
+                font-family: Arial, sans-serif;
+                margin: 20px;
+                background: #f5f5f5;
         }
         
         .header {
-            text-align: center;
-            margin-bottom: 30px;
-            color: #333;
+                text-align: center;
+                margin-bottom: 30px;
+                color: #333;
         }
         
         .svg-grid {
@@ -466,9 +465,9 @@ def create_simple_viewer_html(svg_files, output_dir):
         }
         
         .svg-item {
-            background: white;
+                background: white;
             padding: 10px;
-            border-radius: 5px;
+                border-radius: 5px;
             box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
             text-align: center;
             min-height: 90vh;
@@ -493,13 +492,13 @@ def create_simple_viewer_html(svg_files, output_dir):
             border-radius: 4px;
         }
     </style>
-</head>
-<body>
-    <div class="header">
+    </head>
+    <body>
+        <div class="header">
         <h1>PET Deface SVG Reports</h1>
         <p>All generated SVG reports</p>
-    </div>
-    
+        </div>
+        
     <div class="svg-grid">
 """
 
@@ -514,13 +513,13 @@ def create_simple_viewer_html(svg_files, output_dir):
             <h3>{filename}</h3>
             {svg_content}
         </div>
-"""
+        """
 
     html_content += """
-    </div>
-</body>
-</html>
-"""
+        </div>
+    </body>
+    </html>
+    """
 
     # Write the HTML file
     html_file = os.path.join(output_dir, "svg_reports.html")
@@ -619,46 +618,46 @@ def run_qa(
 
     # Create simple index
     index_html = f"""
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8">
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="utf-8">
     <title>PET Deface QA Reports</title>
-    <style>
-        body {{
-            font-family: Arial, sans-serif;
+        <style>
+            body {{
+                font-family: Arial, sans-serif;
             margin: 20px;
-            background: #f5f5f5;
+                background: #f5f5f5;
         }}
         .header {{
-            text-align: center;
+                text-align: center;
             margin-bottom: 30px;
             color: #333;
-        }}
+            }}
         .content {{
-            background: white;
+                background: white;
             padding: 20px;
             border-radius: 10px;
             box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
             text-align: center;
-        }}
-        .link-button {{
-            display: inline-block;
+            }}
+            .link-button {{
+                display: inline-block;
             margin: 10px;
             padding: 15px 25px;
-            background: #3498db;
-            color: white;
-            text-decoration: none;
+                background: #3498db;
+                color: white;
+                text-decoration: none;
             border-radius: 5px;
             font-weight: bold;
-            font-size: 16px;
-        }}
-        .link-button:hover {{
-            background: #2980b9;
-        }}
-    </style>
-</head>
-<body>
+                font-size: 16px;
+            }}
+            .link-button:hover {{
+                background: #2980b9;
+            }}
+        </style>
+    </head>
+    <body>
     <div class="header">
         <h1>PET Deface QA Reports</h1>
         <p>Quality assessment reports for defacing workflow</p>
@@ -687,6 +686,11 @@ def run_qa(
             </p>
             <div id="server-status" style="margin-top: 10px; padding: 10px; border-radius: 5px; display: none;">
                 <p id="server-message" style="margin: 0; font-weight: bold;"></p>
+                <div id="command-help" style="display: none; margin-top: 15px;">
+                    <p style="margin: 10px 0; font-weight: normal;">To start the NIfTI preview server, run this command in your terminal:</p>
+                    <div id="command-text" style="background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 5px; padding: 10px; font-family: 'Courier New', monospace; font-size: 12px; text-align: left; word-break: break-all; margin: 10px 0;"></div>
+                    <button onclick="copyCommand()" style="background: #28a745; color: white; border: none; padding: 6px 12px; border-radius: 3px; cursor: pointer; font-size: 11px;">Copy Command</button>
+                </div>
             </div>
         </div>
     </div>
@@ -696,8 +700,11 @@ def run_qa(
         async function checkServerAvailability() {{
             const serverStatus = document.getElementById('server-status');
             const serverMessage = document.getElementById('server-message');
+            const commandHelp = document.getElementById('command-help');
+            const commandText = document.getElementById('command-text');
             const niftiLinks = document.querySelectorAll('.nifti-link');
             const serverPort = {server_port};
+            const defacedDir = "{defaced_dir}";
             
             try {{
                 // Try to fetch a simple request to the server
@@ -727,6 +734,11 @@ def run_qa(
                 serverMessage.style.color = '#721c24';
                 serverMessage.textContent = `✗ NIfTI preview server is not running on port ${{serverPort}}. NIfTI viewers will not work.`;
                 
+                // Show command help
+                commandHelp.style.display = 'block';
+                const command = `petdeface-qa --defaced-dir "${{defacedDir}}" --start-server --open-browser`;
+                commandText.textContent = command;
+                
                 // Disable all NIfTI links
                 niftiLinks.forEach(link => {{
                     link.style.opacity = '0.5';
@@ -736,14 +748,29 @@ def run_qa(
             }}
         }}
         
+        // Copy command to clipboard
+        function copyCommand() {{
+            const commandText = document.getElementById('command-text');
+            navigator.clipboard.writeText(commandText.textContent).then(() => {{
+                const button = event.target;
+                const originalText = button.textContent;
+                button.textContent = 'Copied!';
+                button.style.background = '#6c757d';
+                setTimeout(() => {{
+                    button.textContent = originalText;
+                    button.style.background = '#28a745';
+                }}, 2000);
+            }});
+        }}
+        
         // Check server availability when page loads
         document.addEventListener('DOMContentLoaded', function() {{
             checkServerAvailability();
         }});
     </script>
-</body>
-</html>
-"""
+    </body>
+    </html>
+    """
 
     index_file = os.path.join(output_dir, "index.html")
     with open(index_file, "w") as f:

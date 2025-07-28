@@ -8,7 +8,7 @@ from pathlib import Path
 
 
 def create_app(subjects):
-    app = Flask(__name__, static_folder="../", template_folder=".")
+    app = Flask(__name__, static_folder="../", template_folder="templates")
 
     @app.route("/")
     def index():
