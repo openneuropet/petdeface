@@ -7,26 +7,6 @@ authors = [
     {name = "Anthony Galassi", email = "28850131+bendhouseart@users.noreply.github.com"},
     {name = "Murat Bilgel", email = "bilgelm@gmail.com"}
 ]
-license = "MIT"
-readme = "README.md"
-requires-python = ">=3.10"
-dependencies = [
-    "setuptools>=68.1.2",
-    "petutils>=0.0.1",
-    "niworkflows>=1.11.0",
-    "matplotlib>=3.10.1",
-    "niftifixer>=0.0.2",
-    "bids-validator-deno>=2.0.5",
-    "nipreps>=1.0",
-    "nireports>=25.2.0",
-    "nibabel>=5.3.2",
-    "nilearn>=0.10.4",
-    "numpy>=2.1.3",
-    "scipy>=1.14.1",
-    "seaborn>=0.13.2",
-    "pillow>=11.0.0",
-    "imageio>=2.36.0",
-]
 license = {text = "MIT"}
 readme = "README.md"
 requires-python = ">=3.10"
@@ -70,29 +50,6 @@ dev = [
 petdeface = "petdeface.petdeface:main"
 petdeface-qa = "petdeface.qa:main"
 
-[project.optional-dependencies]
-dev = [
-    "black>=23.7.0",
-    "flake8>=6.1.0",
-    "isort>=5.12.0",
-    "pre-commit>=3.3.3",
-    "pytest>=7.4.2",
-    "sphinx>=7.2.6",
-    "sphinx-rtd-theme>=3.0.1",
-    "jupyterlab>=4.4.1",
-    "notebook>=7.4.1",
-    "nbconvert>=7.16.6",
-    "ipywidgets>=8.1.6",
-    "matplotlib>=3.10.1",
-    "pandas>=2.2.3",
-    "pyqt6>=6.9.0",
-]
-
-[project.scripts]
-petdeface = "petdeface.petdeface:main"
-petdeface-qa = "petdeface.qa:main"
-petdeface_qa = "petdeface.qa:main"
-
 # please update the bids version to the latest compliant version when making modifications to this code here
 [tool.bids]
 bids_version = "1.8.0"
@@ -109,15 +66,13 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools]
 packages = ["petdeface"]
 include-package-data = false
-package-data = { 
-    "petdeface" = [
-        "data/sub-01/**/*T1w.nii", 
-        "data/sub-01/**/*T1w.nii.gz", 
-        "data/sub-01/**/*T1w.json", 
-        "data/sub-mni305/**/*T1w.nii", 
-        "data/sub-mni305/**/*T1w.nii.gz", 
-        "data/sub-mni305/**/*T1w.json", 
-        "templates/*.html"
-    ] 
-}
+package-data = { "petdeface" = [
+    "data/sub-01/**/*T1w.nii", 
+    "data/sub-01/**/*T1w.nii.gz", 
+    "data/sub-01/**/*T1w.json", 
+    "data/sub-mni305/**/*T1w.nii", 
+    "data/sub-mni305/**/*T1w.nii.gz", 
+    "data/sub-mni305/**/*T1w.json", 
+    "templates/*.html"
+] }
 exclude-package-data = { "petdeface" = ["data/sub-02/**/*"] }

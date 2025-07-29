@@ -13,6 +13,7 @@ import socketserver
 import time
 import subprocess
 import signal
+import sys
 from pathlib import Path
 
 # Handle imports for both script and module execution (including debugger)
