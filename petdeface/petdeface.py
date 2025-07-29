@@ -1372,6 +1372,14 @@ def cli():
         default=[],
     )
     parser.add_argument(
+        "--use_template_anat",
+        help="Use template anatomical image when no T1w is available for PET scans. Options: 't1' (included T1w template), 'mni' (MNI template), or 'pet' (averaged PET image).",
+        type=str,
+        choices=["t1", "mni", "pet"],
+        required=False,
+        default=None,
+    )
+    parser.add_argument(
         "--open-browser",
         "--open_browser",
         action="store_true",
