@@ -31,6 +31,12 @@ jobs:
       - name: Build Docker image
         run: |
           export DOCKER_BUILDKIT=0
+          echo "Debug: Project name extraction:"
+          cat pyproject.toml | grep '^name =' | cut -d '"' -f 2
+          echo "Debug: Version extraction:"
+          cat pyproject.toml | grep '^version =' | cut -d '"' -f 2
+          echo "Debug: Full command that will be run:"
+          echo "docker build --build-arg=\"USE_LOCAL_FREESURFER=${{ github.event.inputs.use_local_freesurfer || 'False' }}\" -t openneuropet/$(cat pyproject.toml | grep '^name =' | cut -d '"' -f 2):$(cat pyproject.toml | grep '^version =' | cut -d '"' -f 2) ."
           make dockerbuild USE_LOCAL_FREESURFER=${{ github.event.inputs.use_local_freesurfer || 'False' }}
           
       - name: Push Docker image
