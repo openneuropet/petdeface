@@ -30,6 +30,7 @@ jobs:
         
       - name: Build Docker image
         run: |
+          export DOCKER_BUILDKIT=0
           make dockerbuild USE_LOCAL_FREESURFER=${{ github.event.inputs.use_local_freesurfer || 'False' }}
           
       - name: Push Docker image
