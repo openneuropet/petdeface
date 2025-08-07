@@ -1,0 +1,41 @@
+name: Build Docker Image
+
+on:
+  workflow_dispatch:
+    inputs:
+      use_local_freesurfer:
+        type: boolean
+        description: 'Use local FreeSurfer binaries instead of downloading'
+        required: false
+        default: false
+      push_to_registry:
+        type: boolean
+        description: 'Push the built image to Docker registry'
+        required: false
+        default: false
+  push:
+    branches: [ main, master ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  build-docker:
+    runs-on: self-hosted
+    name: Build Docker Image
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        
+      - name: Build Docker image
+        run: |
+          make dockerbuild USE_LOCAL_FREESURFER=${{ github.event.inputs.use_local_freesurfer || 'False' }}
+          
+      - name: Push Docker image
+        if: github.event.inputs.push_to_registry == 'true' || startsWith(github.ref, 'refs/tags/')
+        run: |
+          make dockerpush 
