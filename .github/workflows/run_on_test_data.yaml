@@ -30,15 +30,11 @@ jobs:
       run: |
         uv build
         
-    - name: Install package with uv pip
-      run: |
-        uv pip install dist/*.whl
-        
     - name: Create output directory
       run: |
         mkdir -p data_defaced
         
-    - name: Run petdeface on test data
+    - name: Run petdeface on test data with uv run
       run: |
-        petdeface petdeface/data/ data_defaced/ --participant-label sub-01
+        uv run --with dist/*.whl petdeface petdeface/data/ data_defaced/ --participant-label sub-01
 
