@@ -34,22 +34,7 @@ jobs:
       uses: astral-sh/setup-uv@v3
       with:
         version: latest
-        
-    - name: Setup FreeSurfer environment
-      run: |
-        # Add FreeSurfer to PATH
-        export PATH=$FREESURFER_HOME:$PATH
-        
-        # Source FreeSurfer setup script if it exists
-        if [ -f "$FREESURFER_HOME/SetUpFreeSurfer.sh" ]; then
-          source $FREESURFER_HOME/SetUpFreeSurfer.sh
-        fi
-        
-        # Check if FreeSurfer is available
-        which mideface || echo "mideface not found in PATH"
-        echo "FREESURFER_HOME: $FREESURFER_HOME"
-        echo "PATH: $PATH"
-        
+
     - name: Build package with uv
       run: |
         uv build
@@ -60,4 +45,14 @@ jobs:
         
     - name: Run petdeface on test data with uv run
       run: |
+        # Set FreeSurfer environment for this step
+        export FREESURFER_HOME="/usr/local/freesurfer/7.4.1"
+        export PATH="$FREESURFER_HOME/bin:$PATH"
+        
+        # Source FreeSurfer setup if available
+        if [ -f "$FREESURFER_HOME/SetUpFreeSurfer.sh" ]; then
+          source "$FREESURFER_HOME/SetUpFreeSurfer.sh"
+        fi
+        
+        # Run petdeface with FreeSurfer environment
         uv run --with dist/*.whl petdeface petdeface/data/ data_defaced/ participant --participant_label sub-01
