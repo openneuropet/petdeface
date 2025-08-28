@@ -9,8 +9,9 @@ on:
       - 'pyproject.toml'
       - 'uv.lock'
       - '.github/workflows/run_on_test_data.yaml'
-  pull_request:
+  pull_request_target:
     branches: [ main, dev ]
+    types: [opened, synchronize, reopened]
     paths:
       - 'petdeface/**'
       - 'pyproject.toml'
@@ -19,7 +20,7 @@ on:
 env: 
   FREESURFER_HOME: "/usr/local/freesurfer/7.4.1"
 jobs: 
-  test-petdeface:
+  run-petdeface-on-data:
     runs-on: self-hosted
     steps:
     - name: Checkout repository
