@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>NiiVue - Scan Comparisons</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 0;
+        padding: 20px;
+        background-color: #f0f0f0;
+      }
+      .header {
+        text-align: center;
+        margin-bottom: 40px;
+      }
+      .title {
+        font-size: 3em;
+        font-weight: bold;
+        color: #333;
+        margin-bottom: 10px;
+      }
+      .subtitle {
+        font-size: 1.2em;
+        color: #666;
+      }
+      .comparisons-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+        gap: 20px;
+        max-width: 1200px;
+        margin: 0 auto;
+      }
+      .comparison-card {
+        background: white;
+        padding: 20px;
+        border-radius: 10px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        text-align: center;
+        transition: transform 0.2s;
+      }
+      .comparison-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+      }
+      .subject-id {
+        font-size: 1.5em;
+        font-weight: bold;
+        color: #333;
+        margin-bottom: 10px;
+      }
+      .scan-type {
+        font-size: 1.2em;
+        color: #007bff;
+        font-weight: bold;
+        margin-bottom: 10px;
+        text-transform: uppercase;
+      }
+      .session-count {
+        color: #666;
+        margin-bottom: 20px;
+      }
+      .view-btn {
+        display: inline-block;
+        padding: 10px 20px;
+        background-color: #007bff;
+        color: white;
+        text-decoration: none;
+        border-radius: 5px;
+        font-weight: bold;
+        transition: background-color 0.2s;
+      }
+      .view-btn:hover {
+        background-color: #0056b3;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="header">
+      <div class="title">NiiVue Viewer</div>
+      <div class="subtitle">Select a scan comparison to view</div>
+    </div>
+    
+    <div class="comparisons-grid">
+      {% for comparison in scan_comparisons %}
+        <div class="comparison-card">
+          <div class="subject-id">{{ comparison.subject_id }}</div>
+          <div class="scan-type">{{ comparison.scan_type.upper() }}</div>
+          <div class="session-count">Original vs Defaced</div>
+          <a href="/scan/{{ comparison.subject_id }}/{{ comparison.scan_type }}" class="view-btn">View Comparison</a>
+        </div>
+      {% endfor %}
+    </div>
+  </body>
+</html>
