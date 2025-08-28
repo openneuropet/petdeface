@@ -8,12 +8,14 @@ on:
       - 'petdeface/**'
       - 'pyproject.toml'
       - 'uv.lock'
+      - '.github/workflows/run_on_test_data.yaml'
   pull_request:
     branches: [ main, dev ]
     paths:
       - 'petdeface/**'
       - 'pyproject.toml'
       - 'uv.lock'
+      - '.github/workflows/run_on_test_data.yaml'
 env: 
   FREESURFER_HOME: "/usr/local/freesurfer/7.4.1"
 jobs: 
@@ -58,4 +60,4 @@ jobs:
         
     - name: Run petdeface on test data with uv run
       run: |
-        uv run --with dist/*.whl petdeface petdeface/data/ data_defaced/ participant --participant-label sub-01
+        uv run --with dist/*.whl petdeface petdeface/data/ data_defaced/ participant --participant_label sub-01
