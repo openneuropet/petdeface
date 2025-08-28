@@ -1,0 +1,44 @@
+name: Run petdeface on test data
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'petdeface/**'
+      - 'pyproject.toml'
+      - 'uv.lock'
+
+jobs:
+  test-petdeface:
+    runs-on: self-hosted
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+        
+    - name: Install uv
+      uses: astral-sh/setup-uv@v3
+      with:
+        version: latest
+        
+    - name: Build package with uv
+      run: |
+        uv build
+        
+    - name: Install package with uv pip
+      run: |
+        uv pip install dist/*.whl
+        
+    - name: Create output directory
+      run: |
+        mkdir -p data_defaced
+        
+    - name: Run petdeface on test data
+      run: |
+        petdeface petdeface/data/ data_defaced/ --participant-label sub-01
+
