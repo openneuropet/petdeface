@@ -2,7 +2,14 @@ name: Run petdeface on test data
 
 on:
   workflow_dispatch:
+  push:
+    branches: [ main, dev ]
+    paths:
+      - 'petdeface/**'
+      - 'pyproject.toml'
+      - 'uv.lock'
   pull_request:
+    branches: [ main, dev ]
     paths:
       - 'petdeface/**'
       - 'pyproject.toml'
@@ -12,7 +19,6 @@ env:
 jobs: 
   test-petdeface:
     runs-on: self-hosted
-    
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
@@ -27,6 +33,21 @@ jobs:
       with:
         version: latest
         
+    - name: Setup FreeSurfer environment
+      run: |
+        # Add FreeSurfer to PATH
+        export PATH=$FREESURFER_HOME:$PATH
+        
+        # Source FreeSurfer setup script if it exists
+        if [ -f "$FREESURFER_HOME/SetUpFreeSurfer.sh" ]; then
+          source $FREESURFER_HOME/SetUpFreeSurfer.sh
+        fi
+        
+        # Check if FreeSurfer is available
+        which mideface || echo "mideface not found in PATH"
+        echo "FREESURFER_HOME: $FREESURFER_HOME"
+        echo "PATH: $PATH"
+        
     - name: Build package with uv
       run: |
         uv build
@@ -37,4 +58,4 @@ jobs:
         
     - name: Run petdeface on test data with uv run
       run: |
-        uv run --with dist/*.whl petdeface petdeface/data/ data_defaced/ participant --participant_label sub-01
+        uv run --with dist/*.whl petdeface petdeface/data/ data_defaced/ participant --participant-label sub-01
