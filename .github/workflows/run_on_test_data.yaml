@@ -1,0 +1,59 @@
+name: Run petdeface on test data
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main, dev ]
+    paths:
+      - 'petdeface/**'
+      - 'pyproject.toml'
+      - 'uv.lock'
+      - '.github/workflows/run_on_test_data.yaml'
+  pull_request_target:
+    branches: [ main, dev ]
+    types: [opened, synchronize, reopened]
+    paths:
+      - 'petdeface/**'
+      - 'pyproject.toml'
+      - 'uv.lock'
+      - '.github/workflows/run_on_test_data.yaml'
+env: 
+  FREESURFER_HOME: "/usr/local/freesurfer/7.4.1"
+jobs: 
+  run-petdeface-on-data:
+    runs-on: self-hosted
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+        
+    - name: Install uv
+      uses: astral-sh/setup-uv@v3
+      with:
+        version: latest
+
+    - name: Build package with uv
+      run: |
+        uv build
+        
+    - name: Create output directory
+      run: |
+        mkdir -p data_defaced
+        
+    - name: Run petdeface on test data with uv run
+      run: |
+        # Set FreeSurfer environment for this step
+        export FREESURFER_HOME="/usr/local/freesurfer/7.4.1"
+        export PATH="$FREESURFER_HOME/bin:$PATH"
+        
+        # Source FreeSurfer setup if available
+        if [ -f "$FREESURFER_HOME/SetUpFreeSurfer.sh" ]; then
+          source "$FREESURFER_HOME/SetUpFreeSurfer.sh"
+        fi
+        
+        # Run petdeface with FreeSurfer environment
+        uv run --with dist/*.whl petdeface petdeface/data/ data_defaced/ participant --participant_label sub-01
