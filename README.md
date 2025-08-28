@@ -12,6 +12,7 @@ This software can be installed via source or via pip from PyPi with `pip install
 
 | CI  | Status |   
 |---------| ------ |
+| `Run on test data` | [![Run on test data](https://github.com/openneuropet/petdeface/actions/workflows/run_on_test_data.yaml/badge.svg)](https://github.com/openneuropet/petdeface/actions/workflows/run_on_test_data.yaml) |
 | `docker build . -t petdeface` | ![docker_build](https://codebuild.us-east-1.amazonaws.com/badges?uuid=eyJlbmNyeXB0ZWREYXRhIjoiYzdXV0tYSkQzTVNkcG04cHA2S055UXlKRlZTU1VONThUMVRoZVcwU3l1aHFhdVBlNDNaRGVCYzdWM1Q0WjYzQ1lRU2ZTSHpmSERPWFRkVXVyb3k3RTZBPSIsIml2UGFyYW1ldGVyU3BlYyI6IjRCZFFIQnNGT2lKcDA1VG4iLCJtYXRlcmlhbFNldFNlcmlhbCI6MX0%3D&branch=main) |
 | `docker push` | ![docker push icon](https://codebuild.us-east-1.amazonaws.com/badges?uuid=eyJlbmNyeXB0ZWREYXRhIjoia0c1bEJYUGI2SXlWYi9JMm1tcGtiYWVTdVd3bmlnOUFaTjN4QjJITU5PTVpvQnN3TlowajhxNmhHY2RwQ2Z5SU93OExqc2xvMzFnTHFvajlqVk1MV2FzPSIsIml2UGFyYW1ldGVyU3BlYyI6Ikl6SzRyc1RabzBnSkplTjciLCJtYXRlcmlhbFNldFNlcmlhbCI6MX0%3D&branch=main) |
 | `Python 3.14 >= 3.10` | [![Check Python Compatibility](https://github.com/openneuropet/petdeface/actions/workflows/check_python_compatibility.yaml/badge.svg)](https://github.com/openneuropet/petdeface/actions/workflows/check_python_compatibility.yaml) |
