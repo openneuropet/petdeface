@@ -36,5 +36,5 @@ jobs:
         
     - name: Run petdeface on test data with uv run
       run: |
-        uv run --with dist/*.whl petdeface petdeface/data/ data_defaced/ --participant-label sub-01
+        uv run --with dist/*.whl petdeface petdeface/data/ data_defaced/ participant --participant_label sub-01
 
