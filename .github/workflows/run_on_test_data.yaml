@@ -14,13 +14,11 @@ on:
       - 'petdeface/**'
       - 'pyproject.toml'
       - 'uv.lock'
-
-jobs:
+env: 
+  FREESURFER_HOME: "/usr/local/freesurfer/7.4.1"
+jobs: 
   test-petdeface:
     runs-on: self-hosted
-    env:
-      FREESURFER_HOME: /usr/local/freesurfer/7.4.1
-    
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
@@ -61,4 +59,3 @@ jobs:
     - name: Run petdeface on test data with uv run
       run: |
         uv run --with dist/*.whl petdeface petdeface/data/ data_defaced/ participant --participant-label sub-01
-
