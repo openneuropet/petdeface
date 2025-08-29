@@ -598,7 +598,7 @@ def init_single_subject_wf(
                     after_label="Defaced T1w",
                     out_report=f"{anat_string}_t1w_before_after.svg",
                 ),
-                name=f"{anat_string}_before_and_after_report",
+                name=f"{anat_string}_t1w_before_and_after_report",
             )
 
             t1w_before_after_report.inputs.before = t1w_file
@@ -609,7 +609,7 @@ def init_single_subject_wf(
                     after_label=f"Defaced {pet_string}",
                     out_report=f"{pet_string}_pet_before_after.svg",
                 ),
-                name=f"{pet_string}_before_and_after_report",
+                name=f"{pet_string}_pet_before_and_after_report",
             )
             pet_to_t1w_coregistration = Node(
                 SimpleBeforeAfterRPT(
