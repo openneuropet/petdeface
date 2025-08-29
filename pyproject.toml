@@ -1,6 +1,6 @@
 [project]
 name = "petdeface"
-version = "0.3.0"
+version = "0.3.1"
 description = "A nipype PET and MR defacing pipeline for BIDS datasets utilizing FreeSurfer's MiDeFace."
 authors = [
     {name = "Martin Nørgaard", email = "martin.noergaard@nru.dk"},
@@ -48,6 +48,7 @@ dev = [
 
 [project.scripts]
 petdeface = "petdeface.petdeface:main"
+petdeface-qa = "petdeface.qa:main"
 
 # please update the bids version to the latest compliant version when making modifications to this code here
 [tool.bids]
@@ -65,5 +66,13 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools]
 packages = ["petdeface"]
 include-package-data = false
-package-data = { "petdeface" = ["data/sub-01/**/*T1w.nii", "data/sub-01/**/*T1w.nii.gz", "data/sub-01/**/*T1w.json", "data/sub-mni305/**/*T1w.nii", "data/sub-mni305/**/*T1w.nii.gz", "data/sub-mni305/**/*T1w.json"] }
+package-data = { "petdeface" = [
+    "data/sub-01/**/*T1w.nii", 
+    "data/sub-01/**/*T1w.nii.gz", 
+    "data/sub-01/**/*T1w.json", 
+    "data/sub-mni305/**/*T1w.nii", 
+    "data/sub-mni305/**/*T1w.nii.gz", 
+    "data/sub-mni305/**/*T1w.json", 
+    "templates/*.html"
+] }
 exclude-package-data = { "petdeface" = ["data/sub-02/**/*"] }

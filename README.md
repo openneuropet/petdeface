@@ -12,6 +12,7 @@ This software can be installed via source or via pip from PyPi with `pip install
 
 | CI  | Status |   
 |---------| ------ |
+| `Run on test data` | [![Run on test data](https://github.com/openneuropet/petdeface/actions/workflows/run_on_test_data.yaml/badge.svg)](https://github.com/openneuropet/petdeface/actions/workflows/run_on_test_data.yaml) |
 | `docker build . -t petdeface` | ![docker_build](https://codebuild.us-east-1.amazonaws.com/badges?uuid=eyJlbmNyeXB0ZWREYXRhIjoiYzdXV0tYSkQzTVNkcG04cHA2S055UXlKRlZTU1VONThUMVRoZVcwU3l1aHFhdVBlNDNaRGVCYzdWM1Q0WjYzQ1lRU2ZTSHpmSERPWFRkVXVyb3k3RTZBPSIsIml2UGFyYW1ldGVyU3BlYyI6IjRCZFFIQnNGT2lKcDA1VG4iLCJtYXRlcmlhbFNldFNlcmlhbCI6MX0%3D&branch=main) |
 | `docker push` | ![docker push icon](https://codebuild.us-east-1.amazonaws.com/badges?uuid=eyJlbmNyeXB0ZWREYXRhIjoia0c1bEJYUGI2SXlWYi9JMm1tcGtiYWVTdVd3bmlnOUFaTjN4QjJITU5PTVpvQnN3TlowajhxNmhHY2RwQ2Z5SU93OExqc2xvMzFnTHFvajlqVk1MV2FzPSIsIml2UGFyYW1ldGVyU3BlYyI6Ikl6SzRyc1RabzBnSkplTjciLCJtYXRlcmlhbFNldFNlcmlhbCI6MX0%3D&branch=main) |
 | `Python 3.14 >= 3.10` | [![Check Python Compatibility](https://github.com/openneuropet/petdeface/actions/workflows/check_python_compatibility.yaml/badge.svg)](https://github.com/openneuropet/petdeface/actions/workflows/check_python_compatibility.yaml) |
@@ -78,6 +79,7 @@ options:
                         Options: 't1' (included T1w template), 'mni' (MNI template), or 'pet' 
                         (averaged PET image).
   --open_browser        Open browser to show QA reports after completion
+  --qa-port QA_PORT     Port for NIfTI preview server (default: 8000)
 ```
 
 Working example usage:
@@ -105,6 +107,68 @@ Example usage with template anatomical:
 ```bash
 petdeface /inputfolder /outputfolder --use_template_anat t1 --n_procs 16
 ```
+
+### Quality Assessment (QA) Reports
+
+PETdeface includes a comprehensive quality assessment system that generates reports to help validate defacing results. The QA system creates both SVG reports and interactive NIfTI viewers.
+
+#### QA Report Location
+
+QA reports are automatically generated in the input BIDS directory under `derivatives/petdeface/qa/`. This includes:
+- SVG reports showing before/after defacing comparisons
+- Interactive HTML viewers for 3D NIfTI visualization
+- An index page linking to all available reports
+
+#### Running QA Reports
+
+**Automatic QA generation:**
+```bash
+petdeface /inputfolder /outputfolder --open_browser
+```
+
+**Manual QA generation using the separate QA tool:**
+```bash
+petdeface-qa /inputfolder --open-browser --start-server
+```
+
+#### NIfTI Preview Server
+
+For 3D NIfTI visualization, PETdeface can start a local HTTP server to serve NIfTI files. This is required due to browser security restrictions.
+
+**Start with server:**
+```bash
+petdeface-qa /inputfolder --start-server --open-browser
+```
+
+**Custom port:**
+```bash
+petdeface-qa /inputfolder --start-server --qa-port 8080
+```
+
+#### QA Tool Options
+
+The `petdeface-qa` command provides the following options:
+
+```bash
+usage: petdeface-qa [-h] bids_dir [--output-dir OUTPUT_DIR] 
+                    [--open-browser] [--start-server] [--qa-port QA_PORT]
+
+Generate SVG QA reports for PET deface workflow.
+
+positional arguments:
+  bids_dir               BIDS directory containing the defaced dataset (with derivatives/petdeface)
+
+options:
+  -h, --help            show this help message and exit
+  --output-dir OUTPUT_DIR, --output_dir OUTPUT_DIR
+                        Output directory for HTML files (default: derivatives/petdeface/qa/)
+  --open-browser        Open browser automatically
+  --start-server        Start local HTTP server for NIfTI file access (required for NIfTI viewers)
+  --qa-port QA_PORT, --qa_port QA_PORT
+                        Port for NIfTI preview server (default: 8000)
+```
+
+**Note**: The NIfTI preview server is required for 3D visualization due to browser CORS restrictions. Keep the terminal running while viewing NIfTI files.
 
 ### Docker Usage
 

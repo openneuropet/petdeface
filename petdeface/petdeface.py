@@ -11,7 +11,9 @@ from platform import system
 from pathlib import Path
 import subprocess
 from typing import Union
-from nipype.interfaces.freesurfer import MRICoreg
+
+
+from nipype.interfaces.freesurfer import MRICoreg, ApplyVolTransform
 from nipype.interfaces.io import DataSink
 from nipype.interfaces.base.traits_extension import File as traits_extensionFile
 from nipype.pipeline import Node
@@ -19,6 +21,7 @@ from niworkflows.engine.workflows import LiterateWorkflow as Workflow
 from niworkflows.utils.bids import collect_data
 from niworkflows.utils.bids import collect_participants
 from niworkflows.utils.misc import check_valid_fs_license
+from nireports.interfaces.reporting.base import SimpleBeforeAfterRPT
 from petutils.petutils import collect_anat_and_pet
 from importlib.metadata import version
 
@@ -412,6 +415,10 @@ def init_single_subject_wf(
     datasink.inputs.substitutions = [
         (".face-after", "_desc-faceafter_T1w"),
         (".face-before", "_desc-facebefore_T1w"),
+        # Fix SVG naming to match actual file names
+        ("_t1w_before_after.svg", "_desc-beforeafter_T1w.svg"),
+        ("_pet_before_after.svg", "_desc-beforeafter_pet.svg"),
+        ("_registration_to_t1w.svg", "_desc-petregistration_pet.svg"),
     ]
 
     # deface t1w(s)
@@ -564,12 +571,66 @@ def init_single_subject_wf(
 
             coreg_pet_to_t1w = Node(mricoreg, "coreg_pet_to_t1w")
 
+            # warp pet image to T1w space for later QA
+            warp_pet_to_t1w_space = Node(ApplyVolTransform(), "warp_pet_to_t1w_space")
+            warp_pet_to_t1w_space.inputs.target_file = t1w_file
+
+            # warp defaced pet image to T1w space for QA comparison
+            warp_defaced_pet_to_t1w_space = Node(
+                ApplyVolTransform(), "warp_defaced_pet_to_t1w_space"
+            )
+            warp_defaced_pet_to_t1w_space.inputs.target_file = t1w_file
+
+            # weighted average of the defaced PET image (4D -> 3D) using timing from original PET
+            # Use the modified WeightedAverage interface with the original PET's sidecar
+            weighted_average_defaced = Node(
+                WeightedAverage(pet_file=pet_file), name="weighted_average_defaced"
+            )
+            # Set the original PET file as the sidecar source for timing info
+            weighted_average_defaced.inputs.sidecar_file = pet_file
+
             deface_pet = Node(ApplyMideface(in_file=pet_file), name="deface_pet")
 
+            # create simple before and after reports
+            t1w_before_after_report = Node(
+                SimpleBeforeAfterRPT(
+                    before_label="Faced T1w",
+                    after_label="Defaced T1w",
+                    out_report=f"{anat_string}_t1w_before_after.svg",
+                ),
+                name=f"{anat_string}_t1w_before_and_after_report",
+            )
+
+            t1w_before_after_report.inputs.before = t1w_file
+
+            pet_before_and_after_report = Node(
+                SimpleBeforeAfterRPT(
+                    before_label=f"Faced {pet_string}",
+                    after_label=f"Defaced {pet_string}",
+                    out_report=f"{pet_string}_pet_before_after.svg",
+                ),
+                name=f"{pet_string}_pet_before_and_after_report",
+            )
+            pet_to_t1w_coregistration = Node(
+                SimpleBeforeAfterRPT(
+                    before_label=f"{pet_string}",
+                    after_label=f"{anat_string}",
+                    out_report=f"{pet_string}_registration_to_t1w.svg",
+                ),
+                name=f"{pet_string}_to_{anat_string}_registration",
+            )
+
+            # Connect all the nodes in the PET workflow
             pet_wf.connect(
                 [
+                    # Connection 1: weighted_average -> coreg_pet_to_t1w
+                    # Takes the averaged PET image and feeds it as the source for registration
                     (weighted_average, coreg_pet_to_t1w, [("out_file", "source_file")]),
+                    # Connection 2: coreg_pet_to_t1w -> deface_pet
+                    # Takes the registration matrix (LTA file) and feeds it to the defacing node
                     (coreg_pet_to_t1w, deface_pet, [("out_lta_file", "lta_file")]),
+                    # Connection 3: coreg_pet_to_t1w -> datasink
+                    # Saves the registration matrix (LTA file) to the output directory
                     (
                         coreg_pet_to_t1w,
                         datasink,
@@ -580,6 +641,34 @@ def init_single_subject_wf(
                             )
                         ],
                     ),
+                    # Connection 4: weighted_average -> warp_pet_to_t1w_space
+                    # Takes the averaged PET image and feeds it as the source for warping to T1w space
+                    (
+                        weighted_average,
+                        warp_pet_to_t1w_space,
+                        [("out_file", "source_file")],
+                    ),
+                    # Connection 5: coreg_pet_to_t1w -> warp_pet_to_t1w_space
+                    # Takes the registration matrix and feeds it as the transformation for warping
+                    (
+                        coreg_pet_to_t1w,
+                        warp_pet_to_t1w_space,
+                        [("out_lta_file", "reg_file")],
+                    ),
+                    # Connection 6: warp_pet_to_t1w_space -> datasink
+                    # Saves the PET image warped to T1w space for QA purposes
+                    (
+                        warp_pet_to_t1w_space,
+                        datasink,
+                        [
+                            (
+                                "transformed_file",
+                                f"{pet_string.replace('_', '.')}.pet.@warped{run_id}",
+                            )
+                        ],
+                    ),
+                    # Connection 7: deface_pet -> datasink
+                    # Saves the final defaced PET image to the output directory
                     (
                         deface_pet,
                         datasink,
@@ -590,17 +679,119 @@ def init_single_subject_wf(
                             )
                         ],
                     ),
+                    # Connection 8: deface_pet -> weighted_average_defaced
+                    # Takes the defaced PET image (4D) and feeds it to weighted averaging
+                    (
+                        deface_pet,
+                        weighted_average_defaced,
+                        [("out_file", "pet_file")],
+                    ),
+                    # Connection 9: weighted_average_defaced -> warp_defaced_pet_to_t1w_space
+                    # Takes the weighted averaged defaced PET image (3D) and feeds it as the source for warping
+                    (
+                        weighted_average_defaced,
+                        warp_defaced_pet_to_t1w_space,
+                        [("out_file", "source_file")],
+                    ),
+                    # Connection 10: coreg_pet_to_t1w -> warp_defaced_pet_to_t1w_space
+                    # Takes the registration matrix and feeds it as the transformation for warping defaced PET
+                    (
+                        coreg_pet_to_t1w,
+                        warp_defaced_pet_to_t1w_space,
+                        [("out_lta_file", "reg_file")],
+                    ),
+                    # Connection 11: warp_defaced_pet_to_t1w_space -> datasink
+                    # Saves the defaced PET image warped to T1w space for QA comparison
+                    (
+                        warp_defaced_pet_to_t1w_space,
+                        datasink,
+                        [
+                            (
+                                "transformed_file",
+                                f"{pet_string.replace('_', '.')}.pet.@defaced_warped{run_id}",
+                            )
+                        ],
+                    ),
+                    # create simple before and after report for pet image
+                    (
+                        warp_pet_to_t1w_space,
+                        pet_before_and_after_report,
+                        [("transformed_file", "before")],
+                    ),
+                    (
+                        warp_defaced_pet_to_t1w_space,
+                        pet_before_and_after_report,
+                        [("transformed_file", "after")],
+                    ),
+                    # create a simple report showing the registration for pet
+                    (
+                        warp_defaced_pet_to_t1w_space,
+                        pet_to_t1w_coregistration,
+                        [("transformed_file", "before")],
+                    ),
+                    (
+                        t1w_workflows[t1w_file]["workflow"].get_node(
+                            f"deface_t1w_{t1w_workflows[t1w_file]['anat_string']}"
+                        ),
+                        pet_to_t1w_coregistration,
+                        [("out_file", "after")],
+                    ),
+                    # create a before and after image for the t1w defacing
+                    (
+                        t1w_workflows[t1w_file]["workflow"].get_node(
+                            f"deface_t1w_{t1w_workflows[t1w_file]['anat_string']}"
+                        ),
+                        t1w_before_after_report,
+                        [("out_file", "after")],
+                    ),
+                    # Move svg reports to datasink
+                    (
+                        pet_before_and_after_report,
+                        datasink,
+                        [
+                            (
+                                "out_report",
+                                f"{pet_string.replace('_','.')}.pet.@beforeafter{run_id}",
+                            )
+                        ],
+                    ),
+                    (
+                        pet_to_t1w_coregistration,
+                        datasink,
+                        [
+                            (
+                                "out_report",
+                                f"{pet_string.replace('_', '.')}.pet.@registration{run_id}",
+                            )
+                        ],
+                    ),
+                    (
+                        t1w_before_after_report,
+                        datasink,
+                        [
+                            (
+                                "out_report",
+                                f"{anat_string.replace('_', '.')}.anat.@beforeafter{run_id}",
+                            )
+                        ],
+                    ),
                 ]
             )
 
+            # Connect the T1w workflow to the PET workflow
+            # This connects the facemask from the T1w defacing to the PET defacing
             workflow.connect(
                 [
                     (
-                        t1w_workflows[t1w_file]["workflow"],
-                        pet_wf,
+                        t1w_workflows[t1w_file][
+                            "workflow"
+                        ],  # Source: T1w defacing workflow
+                        pet_wf,  # Target: PET workflow
                         [
                             (
+                                # Output from T1w defacing: the facemask file
                                 f"deface_t1w_{t1w_workflows[t1w_file]['anat_string']}.out_facemask",
+                                # Input to PET defacing: the facemask file (same mask used for both T1w and PET)
                                 "deface_pet.facemask",
                             )
                         ],
@@ -1086,6 +1277,7 @@ def cli():
         help="Only deface anatomical images",
     )
     parser.add_argument(
+        "--participant-label",
         "--participant_label",
         "-pl",
         help="The label(s) of the participant/subject to be processed. When specifying multiple subjects separate them with spaces.",
@@ -1109,11 +1301,17 @@ def cli():
         help="Run in singularity container",
     ),
     parser.add_argument(
+        "--n-procs",
         "--n_procs",
         help="Number of processors to use when running the workflow",
         default=2,
     )
-    parser.add_argument("--skip_bids_validator", action="store_true", default=False)
+    parser.add_argument(
+        "--skip-bids-validator",
+        "--skip_bids_validator",
+        action="store_true",
+        default=False,
+    )
     parser.add_argument(
         "--version",
         "-v",
@@ -1132,6 +1330,7 @@ def cli():
         default="adjacent",
     )
     parser.add_argument(
+        "--remove-existing",
         "--remove_existing",
         "-r",
         help="Remove existing output files in output_dir.",
@@ -1139,12 +1338,14 @@ def cli():
         default=False,
     )
     parser.add_argument(
+        "--preview-pics",
         "--preview_pics",
         help="Create preview pictures of defacing, defaults to false for docker",
         action="store_true",
         default=False,
     )
     parser.add_argument(
+        "--participant-label-exclude",
         "--participant_label_exclude",
         help="Exclude a subject(s) from the defacing workflow. e.g. --participant_label_exclude sub-01 sub-02",
         type=str,
@@ -1153,6 +1354,7 @@ def cli():
         default=[],
     )
     parser.add_argument(
+        "--session-label",
         "--session_label",
         help="Select only a specific session(s) to include in the defacing workflow",
         type=str,
@@ -1161,6 +1363,7 @@ def cli():
         default=[],
     )
     parser.add_argument(
+        "--session-label-exclude",
         "--session_label_exclude",
         help="Select a specific session(s) to exclude from the defacing workflow",
         type=str,
@@ -1172,14 +1375,22 @@ def cli():
         "--use_template_anat",
         help="Use template anatomical image when no T1w is available for PET scans. Options: 't1' (included T1w template), 'mni' (MNI template), or 'pet' (averaged PET image).",
         type=str,
+        choices=["t1", "mni", "pet"],
         required=False,
+        default=None,
+    )
+    parser.add_argument(
+        "--open-browser",
+        "--open_browser",
+        action="store_true",
         default=False,
     )
     parser.add_argument(
-        "--open_browser",
-        help="Open browser to show QA reports after completion",
-        action="store_true",
-        default=False,
+        "--qa-port",
+        "--qa_port",
+        type=int,
+        default=8000,
+        help="User can manually choose a default port to serve the nifti images at for 3D previewing of defacing should the default value of 8000 not work.",
     )
 
     arguments = parser.parse_args()
@@ -1390,15 +1601,12 @@ def main():  # noqa: max-complexity: 12
         try:
             # Determine the defaced directory based on placement
 
-            # Run QA
+            # Run QA with server if open_browser is requested
             qa_result = run_qa(
-                faced_dir=str(args.bids_dir),
-                defaced_dir=str(args.output_dir),
-                output_dir=str(args.bids_dir / "derivatives" / "petdeface"),
-                subject=(
-                    " ".join(args.participant_label) if args.participant_label else None
-                ),
+                defaced_dir=str(args.bids_dir),
                 open_browser=args.open_browser,
+                start_server=args.open_browser,  # Start server when opening browser
+                server_port=args.qa_port,
             )
 
             print("\n" + "=" * 60)
@@ -1409,6 +1617,9 @@ def main():  # noqa: max-complexity: 12
         except Exception as e:
             print(f"\nError generating QA reports: {e}")
             print("QA report generation failed, but defacing completed successfully.")
+
+        print("launch QA reports with:")
+        print(f"petdeface-qa {args.bids_dir} --open_browser --start_server")
 
 
 if __name__ == "__main__":

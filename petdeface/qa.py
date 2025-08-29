@@ -1,24 +1,19 @@
-import argparse
+#!/usr/bin/env python3
+"""
+Simple QA system for PET deface SVG reports.
+"""
+
 import os
-import tempfile
-import shutil
-import sys
-from glob import glob
-import nilearn
-from nilearn import plotting
+import glob
+import argparse
 import webbrowser
-import nibabel as nib
-import numpy as np
-from nilearn import image
-import matplotlib.pyplot as plt
-from matplotlib.animation import FuncAnimation
-import imageio
-import multiprocessing as mp
-from functools import partial
-import seaborn as sns
-from PIL import Image, ImageDraw
-from nipype import Workflow, Node
-from tempfile import TemporaryDirectory
+import json
+import http.server
+import socketserver
+import time
+import subprocess
+import signal
+import sys
 from pathlib import Path
 
 # Handle imports for both script and module execution (including debugger)
@@ -39,1368 +34,758 @@ if is_script:
 from nireports.interfaces.reporting.base import SimpleBeforeAfterRPT
 
 
-def preprocess_single_subject(s, output_dir):
-    """Preprocess a single subject's images (for parallel processing)."""
-    temp_dir = os.path.join(output_dir, "temp_3d_images")
+def collect_svg_reports(defaced_dir, output_dir):
+    """Collect SVG files from derivatives/petdeface directory."""
+    derivatives_dir = os.path.join(defaced_dir, "derivatives", "petdeface")
+    if not os.path.exists(derivatives_dir):
+        print(
+            f"Warning: derivatives/petdeface directory not found at {derivatives_dir}"
+        )
+        print("Looking for SVG files in the main defaced directory...")
+        derivatives_dir = defaced_dir
 
-    # Debug: Print what files we're processing
-    print(f"Preprocessing subject {s['id']}:")
-    print(f"  Original: {s['orig_path']}")
-    print(f"  Defaced: {s['defaced_path']}")
+    # Find all SVG files recursively, excluding the qa directory
+    svg_files = []
+    for svg_file in glob.glob(
+        os.path.join(derivatives_dir, "**", "*.svg"), recursive=True
+    ):
+        # Skip files in the qa directory
+        if "qa" not in svg_file:
+            svg_files.append(svg_file)
 
-    # Extract BIDS suffix from original path to preserve meaningful naming
-    orig_basename = os.path.basename(s["orig_path"])
-    defaced_basename = os.path.basename(s["defaced_path"])
+    if not svg_files:
+        print("No SVG files found!")
+        return []
 
-    # Extract the meaningful part (e.g., "sub-01_ses-baseline_T1w" or "sub-01_ses-baseline_pet")
-    def extract_bids_name(basename):
-        # Remove .nii.gz extension
-        name = basename.replace(".nii.gz", "").replace(".nii", "")
-        return name
+    print(f"Found {len(svg_files)} SVG files")
 
-    orig_bids_name = extract_bids_name(orig_basename)
-    defaced_bids_name = extract_bids_name(defaced_basename)
-
-    # Preprocess original image
-    orig_result = load_and_preprocess_image(s["orig_path"])
-    if isinstance(orig_result, nib.Nifti1Image):
-        # Need to save the averaged image with meaningful name
-        orig_3d_path = os.path.join(temp_dir, f"orig_{orig_bids_name}.nii.gz")
-        nib.save(orig_result, orig_3d_path)
-        orig_img = orig_result
-    else:
-        # Already 3D, use original path and load image
-        orig_3d_path = orig_result
-        orig_img = nib.load(orig_result)
-
-    # Preprocess defaced image
-    defaced_result = load_and_preprocess_image(s["defaced_path"])
-    if isinstance(defaced_result, nib.Nifti1Image):
-        # Need to save the averaged image with meaningful name
-        defaced_3d_path = os.path.join(temp_dir, f"defaced_{defaced_bids_name}.nii.gz")
-        nib.save(defaced_result, defaced_3d_path)
-        defaced_img = defaced_result
-    else:
-        # Already 3D, use original path and load image
-        defaced_3d_path = defaced_result
-        defaced_img = nib.load(defaced_result)
-
-    # Create new subject dict with preprocessed paths (update paths to 3D versions)
-    preprocessed_subject = {
-        "id": s["id"],
-        "orig_path": orig_3d_path,  # Update to 3D path
-        "defaced_path": defaced_3d_path,  # Update to 3D path
-        "orig_img": orig_img,  # Keep loaded image for direct use
-        "defaced_img": defaced_img,  # Keep loaded image for direct use
-    }
-
-    print(f"  Preprocessed {s['id']}")
-    return preprocessed_subject
-
-
-def preprocess_images(subjects: dict, output_dir, n_jobs=None):
-    """Preprocess all images once: load and convert 4D to 3D if needed."""
-    print("Preprocessing images (4D→3D conversion)...")
-
-    # Create temp directory
-    temp_dir = os.path.join(output_dir, "temp_3d_images")
-    os.makedirs(temp_dir, exist_ok=True)
-
-    # Set number of jobs for parallel processing
-    if n_jobs is None:
-        n_jobs = mp.cpu_count()
-    print(f"Using {n_jobs} parallel processes for preprocessing")
-
-    # Process subjects in parallel
-    with mp.Pool(processes=n_jobs) as pool:
-        # Create a partial function with the output_dir fixed
-        preprocess_func = partial(preprocess_single_subject, output_dir=output_dir)
-
-        # Process all subjects in parallel
-        preprocessed_subjects = pool.map(preprocess_func, subjects)
-
-    print(f"Preprocessed {len(preprocessed_subjects)} subjects")
-    return preprocessed_subjects
-
-
-def generate_simple_before_and_after(preprocessed_subjects: dict, output_dir):
-    if not output_dir:
-        output_dir = TemporaryDirectory()
-    wf = Workflow(
-        name="simple_before_after_report", base_dir=Path(output_dir) / "images/"
-    )
-
-    # Create a list to store all nodes
-    nodes = []
-
-    for s in preprocessed_subjects:
-        # only run this on the T1w images for now
-        if "T1w" in s["orig_path"]:
-            o_path = Path(s["orig_path"])
-            # Create a valid node name by replacing invalid characters but preserving session info
-            # Use the full path to ensure uniqueness
-            path_parts = s["orig_path"].split(os.sep)
-            subject_part = next(
-                (p for p in path_parts if p.startswith("sub-")), s["id"]
-            )
-            session_part = next((p for p in path_parts if p.startswith("ses-")), "")
-
-            if session_part:
-                valid_name = f"before_after_{subject_part}_{session_part}".replace(
-                    "-", "_"
-                )
-            else:
-                valid_name = f"before_after_{subject_part}".replace("-", "_")
-            node = Node(
-                SimpleBeforeAfterRPT(
-                    before=s["orig_path"],
-                    after=s["defaced_path"],
-                    before_label="Original",
-                    after_label="Defaced",
-                    out_report=f"{s['id']}_simple_before_after.svg",
-                ),
-                name=valid_name,
-            )
-            nodes.append(node)
-
-            # Add all nodes to the workflow
-    wf.add_nodes(nodes)
-
-    # Only run if we have nodes to process
-    if nodes:
-        wf.run(plugin="MultiProc", plugin_args={"n_procs": mp.cpu_count()})
-        # Collect SVG files and move them to images folder
-        collect_svg_reports(wf, output_dir)
-    else:
-        print("No T1w images found for SVG report generation")
-
-
-def collect_svg_reports(wf, output_dir):
-    """Collect SVG reports from workflow and move them to images folder."""
-    import glob
-
-    # Find all SVG files in the workflow directory
-    workflow_dir = wf.base_dir
-    svg_files = glob.glob(os.path.join(workflow_dir, "**", "*.svg"), recursive=True)
-
-    print(f"Found {len(svg_files)} SVG reports")
-
-    # Move each SVG to the images folder
+    # Just return the original file paths - no copying needed
     for svg_file in svg_files:
-        filename = os.path.basename(svg_file)
-        dest_path = os.path.join(output_dir, "images", filename)
-        shutil.move(svg_file, dest_path)
-        print(f"  Moved: {filename}")
+        print(f"Found: {Path(svg_file).name}")
 
-    # Create HTML page for SVG reports
-    create_svg_index_html(svg_files, output_dir)
+    return svg_files
 
 
-def create_svg_index_html(svg_files, output_dir):
-    """Create HTML index page for SVG reports."""
+def kill_process_on_port(port):
+    """Kill any process using the specified port."""
+    try:
+        # Find process using the port
+        result = subprocess.run(
+            ["lsof", "-ti", str(port)], capture_output=True, text=True, check=False
+        )
 
-    svg_entries = ""
-    for svg_file in svg_files:
-        filename = os.path.basename(svg_file)
-        subject_id = filename.replace("_simple_before_after.svg", "")
+        if result.returncode == 0 and result.stdout.strip():
+            pids = result.stdout.strip().split("\n")
+            for pid in pids:
+                if pid:
+                    print(f"Killing process {pid} using port {port}")
+                    try:
+                        os.kill(int(pid), signal.SIGKILL)
+                    except ProcessLookupError:
+                        print(f"Process {pid} already terminated")
+                    except ValueError:
+                        print(f"Invalid PID: {pid}")
 
-        svg_entries += f"""
-        <div class="svg-report">
-            <h3>{subject_id}</h3>
-            <object data="images/{filename}" type="image/svg+xml" style="width: 100%; height: 600px;">
-                <p>Your browser does not support SVG. <a href="images/{filename}">Download SVG</a></p>
-            </object>
-        </div>
-        """
+            # Give it a moment to fully terminate
+            time.sleep(0.5)
+            print(f"Port {port} is now free")
+        else:
+            print(f"Port {port} is already free")
 
+    except FileNotFoundError:
+        print("Warning: 'lsof' command not found, cannot check for existing processes")
+    except Exception as e:
+        print(f"Error killing process on port {port}: {e}")
+
+
+def start_local_server(port=8000, directory=None):
+    """Start a simple HTTP server to serve files locally."""
+    if directory is None:
+        directory = os.getcwd()
+
+    os.chdir(directory)
+
+    class CustomHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
+        def end_headers(self):
+            # Add CORS headers to allow cross-origin requests
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+            self.send_header("Access-Control-Allow-Headers", "*")
+            super().end_headers()
+
+    handler = CustomHTTPRequestHandler
+
+    with socketserver.TCPServer(("", port), handler) as httpd:
+        print(f"Server started at http://localhost:{port}")
+        print(f"Serving files from: {directory}")
+        print("Press Ctrl+C to stop the server")
+
+        try:
+            httpd.serve_forever()
+        except KeyboardInterrupt:
+            print("\nServer stopped.")
+
+
+def collect_nifti_files(defaced_dir):
+    """Collect NIfTI files containing 'defaced' from derivatives/petdeface directory."""
+    derivatives_dir = os.path.join(defaced_dir, "derivatives", "petdeface")
+    if not os.path.exists(derivatives_dir):
+        print(
+            f"Warning: derivatives/petdeface directory not found at {derivatives_dir}"
+        )
+        return {}
+
+    # Find all NIfTI files containing 'defaced'
+    nifti_files = {}
+    for nifti_file in glob.glob(
+        os.path.join(derivatives_dir, "**", "*.nii*"), recursive=True
+    ):
+        filename = Path(nifti_file).name
+
+        # Check if file contains 'defaced'
+        if ("defaced" in filename and "T1w" in filename) or (
+            "defaced" in filename and "wavg" in filename and "pet" in filename
+        ):
+            # Extract subject ID from path
+            path_parts = Path(nifti_file).parts
+            subject_id = None
+            for part in path_parts:
+                if part.startswith("sub-"):
+                    subject_id = part
+                    break
+
+            if subject_id:
+                if subject_id not in nifti_files:
+                    nifti_files[subject_id] = []
+                nifti_files[subject_id].append(nifti_file)
+
+    print(f"Found NIfTI files for {len(nifti_files)} subjects")
+    for subject_id, files in nifti_files.items():
+        print(f"  {subject_id}: {len(files)} files")
+        for file in files:
+            print(f"    {Path(file).name}")
+
+    return nifti_files
+
+
+def create_nifti_viewer_html(subject_id, nifti_files, output_dir, server_port=8000):
+    """Create HTML viewer with rotating NIfTI images for a subject."""
+
+    # Filter files to include only specific types
+    filtered_files = []
+    for nifti_file in nifti_files:
+        filename = Path(nifti_file).name.lower()
+
+        # Include files that are:
+        # 1. T1w defaced images
+        # 2. PET defaced images that are averaged (wavg)
+        # 3. PET defaced images that are warped
+        # 4. PET defaced images that are in T1w space
+        if "defaced" in filename:
+            if "t1w" in filename:
+                # Include T1w defaced images
+                filtered_files.append(nifti_file)
+            elif "pet" in filename:
+                # For PET images, only include if they are averaged (wavg) or have special processing
+                if (
+                    "wavg" in filename
+                    or "warped" in filename
+                    or "space-t1w" in filename
+                ):
+                    filtered_files.append(nifti_file)
+
+    if not filtered_files:
+        print(f"No qualifying NIfTI files found for {subject_id}")
+        return None
+
+    # Create HTML content
     html_content = f"""
     <!DOCTYPE html>
-    <html>
+<html lang="en">
     <head>
         <meta charset="utf-8">
-        <title>PET Deface SVG Reports</title>
+    <title>NiiVue - {subject_id} Defaced Images</title>
         <style>
             body {{
                 font-family: Arial, sans-serif;
-                margin: 20px;
-                background: #f5f5f5;
+            margin: 0;
+            padding: 20px;
+            background-color: #f0f0f0;
             }}
             .header {{
                 text-align: center;
                 margin-bottom: 30px;
+        }}
+        .comparison-title {{
+            font-size: 2.5em;
+            font-weight: bold;
+            margin: 20px 0;
                 color: #333;
             }}
-            .svg-report {{
+        .viewers-container {{
+            display: flex;
+            gap: 30px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }}
+        .viewer {{
+            display: flex;
+            flex-direction: column;
+            align-items: center;
                 background: white;
-                margin-bottom: 40px;
                 padding: 20px;
                 border-radius: 10px;
-                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-            }}
-            .svg-report h3 {{
-                color: #2c3e50;
-                margin-top: 0;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }}
+        .viewer-title {{
+            font-size: 1.5em;
+            font-weight: bold;
                 margin-bottom: 15px;
+            color: #333;
                 text-align: center;
             }}
-            .navigation {{
-                position: fixed;
-                top: 20px;
-                right: 20px;
-                background: white;
-                padding: 15px;
-                border-radius: 10px;
-                box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-                z-index: 1000;
+        .file-path {{
+            font-size: 0.9em;
+            color: #666;
+            margin-bottom: 15px;
+            text-align: center;
+            max-width: 500px;
+            word-break: break-all;
+        }}
+        canvas {{
+            border: 2px solid #ddd;
+                border-radius: 5px;
+        }}
+        .controls {{
+            margin-top: 30px;
+                text-align: center;
             }}
-            .nav-button {{
-                display: block;
-                margin: 5px 0;
-                padding: 8px 12px;
-                background: #3498db;
+        .slider-container {{
+                display: flex;
+            align-items: center;
+                justify-content: center;
+            gap: 15px;
+                margin-bottom: 20px;
+            }}
+        .slider {{
+            width: 300px;
+        }}
+        .reset-btn {{
+            padding: 10px 20px;
+            background-color: #dc3545;
                 color: white;
                 border: none;
                 border-radius: 5px;
                 cursor: pointer;
-                font-size: 12px;
-                text-decoration: none;
-            }}
-            .nav-button:hover {{
-                background: #2980b9;
+            font-size: 1em;
+        }}
+        .reset-btn:hover {{
+            background-color: #c82333;
             }}
         </style>
-        <script>
-            function scrollToReport(direction) {{
-                const reports = document.querySelectorAll('.svg-report');
-                const currentScroll = window.pageYOffset;
-                const windowHeight = window.innerHeight;
-                let targetReport = null;
-                
-                if (direction === 'next') {{
-                    for (let report of reports) {{
-                        if (report.offsetTop > currentScroll + windowHeight * 0.3) {{
-                            targetReport = report;
-                            break;
-                        }}
-                    }}
-                    if (!targetReport && reports.length > 0) {{
-                        targetReport = reports[0];
-                    }}
-                }} else if (direction === 'prev') {{
-                    for (let i = reports.length - 1; i >= 0; i--) {{
-                        if (reports[i].offsetTop < currentScroll - windowHeight * 0.3) {{
-                            targetReport = reports[i];
-                            break;
-                        }}
-                    }}
-                    if (!targetReport && reports.length > 0) {{
-                        targetReport = reports[reports.length - 1];
-                    }}
-                }}
-                
-                if (targetReport) {{
-                    targetReport.scrollIntoView({{ behavior: 'smooth', block: 'center' }});
-                }}
-            }}
-            
-            // Keyboard navigation
-            document.addEventListener('keydown', function(e) {{
-                if (e.key === 'ArrowDown' || e.key === ' ') {{
-                    e.preventDefault();
-                    scrollToReport('next');
-                }} else if (e.key === 'ArrowUp') {{
-                    e.preventDefault();
-                    scrollToReport('prev');
-                }}
-            }});
-        </script>
     </head>
     <body>
-        <div class="navigation">
-            <button class="nav-button" onclick="scrollToReport('prev')">↑ Previous</button>
-            <button class="nav-button" onclick="scrollToReport('next')">↓ Next</button>
-            <div style="margin-top: 10px; font-size: 10px; color: #666;">
-                Use arrow keys or spacebar
-            </div>
-        </div>
-        
         <div class="header">
-            <h1>PET Deface SVG Reports</h1>
-            <p>Before/After comparison reports using nireports</p>
+        <div class="comparison-title">{subject_id}</div>
+        <div class="scan-type">Defaced NIfTI Images</div>
         </div>
         
-        <div class="reports-container">
-            {svg_entries}
-        </div>
-        
-        <div style="text-align: center; margin-top: 30px;">
-            <a href="index.html">← Back to Index</a>
-        </div>
-    </body>
-    </html>
-    """
+    <div class="viewers-container">
+"""
 
-    svg_index_file = os.path.join(output_dir, "SimpleBeforeAfterRPT.html")
-    with open(svg_index_file, "w") as f:
+    # Add a viewer for each NIfTI file
+    for i, nifti_file in enumerate(filtered_files):
+        filename = Path(nifti_file).name
+        # Create a label based on the filename
+        label = filename.replace(".nii.gz", "").replace(".nii", "")
+        label = label.replace("_", " ").replace("-", " ")
+
+        # Convert file path to HTTP URL
+        # Get the relative path from the derivatives directory
+        derivatives_dir = os.path.join(os.path.dirname(output_dir), "..")
+        relative_path = os.path.relpath(nifti_file, derivatives_dir)
+        http_url = f"http://localhost:{server_port}/{relative_path}"
+
+        html_content += f"""
+            <div class="viewer">
+            <div class="viewer-title">{label}</div>
+            <div class="file-path">{http_url}</div>
+            <canvas id="gl_{subject_id}_{i}" width="640" height="640"></canvas>
+        </div>
+        """
+
+    html_content += (
+        """
+        </div>
+    
+    <div class="controls">
+        <div class="slider-container">
+            <label for="rotationSlider">Rotate: </label>
+            <input type="range" id="rotationSlider" min="0" max="36000" value="0" class="slider">
+            <span id="rotationValue">0</span>
+        </div>
+        <button id="resetView" class="reset-btn">Reset View</button>
+    </div>
+
+    <script type="module" async>
+        import { Niivue } from "https://unpkg.com/@niivue/niivue@0.57.0/dist/index.js"
+        
+        const viewers = [];
+        const niftiFiles = """
+        + json.dumps(
+            [
+                f"http://localhost:{server_port}/{os.path.relpath(f, os.path.join(os.path.dirname(output_dir), '..'))}"
+                for f in filtered_files
+            ]
+        )
+        + """;
+        const subjectId = """
+        + json.dumps(subject_id)
+        + """;
+        
+        async function setupViewers() {
+            for (let i = 0; i < niftiFiles.length; i++) {
+                const canvasId = `gl_${subjectId}_${i}`;
+                
+                // Create Niivue instance
+                const nv = new Niivue({ 
+                    isResizeCanvas: false,
+                    isHighQualityCapable: true,
+                    isMultiplanar: false,
+                    isRadiological: false
+                });
+                
+                await nv.attachTo(canvasId);
+                
+                // Configure viewer
+                nv.setSliceType(nv.sliceTypeRender);
+                nv.dragMode = "none";
+                nv.opts.pointerInteraction = false;
+                nv.opts.isMouseWheel = false;
+                nv.opts.isColorbar = false;
+                nv.opts.isResizeCanvas = false;
+                nv.opts.isDrag = false;
+                
+                // Load volume
+                try {
+                    // Extract file extension from the path
+                    const pathParts = niftiFiles[i].split('/');
+                    const filename = pathParts[pathParts.length - 1];
+                    const fileExt = filename.includes('.nii.gz') ? '.nii.gz' : 
+                                   filename.includes('.nii') ? '.nii' : '.nii.gz';
+                    
+                    await nv.loadVolumes([{ 
+                        url: niftiFiles[i],
+                        name: `volume_${canvasId}${fileExt}`
+                    }]);
+                    nv.drawScene();
+                    console.log(`Loaded volume for ${canvasId}`);
+                } catch (error) {
+                    console.error(`Error loading volume for ${canvasId}:`, error);
+                }
+                
+                // Remove event listeners
+                const canvasElement = nv.canvas;
+                canvasElement.onwheel = null;
+                canvasElement.onmousedown = null;
+                canvasElement.onmousemove = null;
+                canvasElement.onmouseup = null;
+                canvasElement.onclick = null;
+                canvasElement.ondblclick = null;
+                canvasElement.oncontextmenu = null;
+                canvasElement.onpointerdown = null;
+                canvasElement.onpointermove = null;
+                canvasElement.onpointerup = null;
+                canvasElement.onpointerleave = null;
+                canvasElement.onpointerenter = null;
+                canvasElement.onpointercancel = null;
+                canvasElement.onmouseenter = null;
+                canvasElement.onmouseleave = null;
+                canvasElement.onmouseout = null;
+                canvasElement.onmouseover = null;
+                
+                viewers.push(nv);
+            }
+        }
+        
+        setupViewers().then(() => {
+            // Set up controls
+            const slider = document.getElementById('rotationSlider');
+            const valueSpan = document.getElementById('rotationValue');
+            const resetBtn = document.getElementById('resetView');
+            
+            slider.addEventListener('input', () => {
+                const deg = parseFloat(slider.value);
+                valueSpan.textContent = deg;
+                const rad = deg * Math.PI / 180;
+                viewers.forEach(nv => {
+                    nv.scene.renderAzimuth = rad;
+                    nv.drawScene();
+                });
+            });
+            
+            resetBtn.addEventListener('click', () => {
+                slider.value = 0;
+                valueSpan.textContent = 0;
+                viewers.forEach(nv => {
+                    nv.scene.renderAzimuth = 0;
+                    nv.scene.renderElevation = 0;
+                    nv.scene.volScaleMultiplier = 1;
+                    nv.scene.pan2Dxyz = [0.5, 0.5, 0.5];
+                    nv.setSliceType(nv.sliceTypeRender);
+                    nv.drawScene();
+                });
+            });
+        });
+    </script>
+</body>
+</html>
+"""
+    )
+
+    # Save the HTML file
+    html_path = os.path.join(output_dir, f"{subject_id}_nifti_viewer.html")
+    with open(html_path, "w") as f:
         f.write(html_content)
 
-    print(f"Created SVG reports index: {svg_index_file}")
+    print(f"Created NIfTI viewer: {html_path}")
+    return html_path
 
 
-def create_overlay_comparison(orig_path, defaced_path, subject_id, output_dir):
-    """Create overlay comparison with original as background and defaced as overlay."""
+def create_simple_viewer_html(svg_files, output_dir):
+    """Create simple HTML viewer with all SVG images on one page."""
 
-    # Load images
-    orig_img = image.load_img(orig_path)
-    defaced_img = image.load_img(defaced_path)
-
-    # Create overlay plot
-    fig = plotting.plot_anat(
-        orig_img,
-        title=f"Overlay: Original (background) + Defaced (overlay) - {subject_id}",
-        display_mode="ortho",
-        cut_coords=(0, 0, 0),
-        colorbar=True,
-        annotate=True,
-    )
-
-    # Add defaced as overlay
-    plotting.plot_roi(defaced_img, bg_img=orig_img, figure=fig, alpha=0.7, color="red")
-
-    # Save overlay
-    overlay_file = os.path.join(output_dir, f"overlay_{subject_id}.png")
-    fig.savefig(overlay_file, dpi=150)
-    fig.close()
-
-    return overlay_file
-
-
-def create_animated_gif(orig_path, defaced_path, subject_id, output_dir, n_slices=20):
-    """Create animated GIF showing different slices through the volume."""
-
-    # Load images
-    orig_img = image.load_img(orig_path)
-    defaced_img = image.load_img(defaced_path)
-
-    # Get data
-    orig_data = orig_img.get_fdata()
-    defaced_data = defaced_img.get_fdata()
-
-    # Create figure for animation
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 6))
-    fig.suptitle(f"Animated Comparison - {subject_id}", fontsize=16)
-
-    # Initialize plots
-    slice_idx = orig_data.shape[2] // 2
-    im1 = ax1.imshow(orig_data[:, :, slice_idx], cmap="gray")
-    im2 = ax2.imshow(defaced_data[:, :, slice_idx], cmap="hot")
-
-    ax1.set_title("Original")
-    ax2.set_title("Defaced")
-    ax1.axis("off")
-    ax2.axis("off")
-
-    def animate(frame):
-        slice_idx = int(frame * orig_data.shape[2] / n_slices)
-        im1.set_array(orig_data[:, :, slice_idx])
-        im2.set_array(defaced_data[:, :, slice_idx])
-        return [im1, im2]
-
-    # Create animation
-    anim = FuncAnimation(fig, animate, frames=n_slices, interval=200, blit=True)
-
-    # Save as GIF
-    gif_file = os.path.join(output_dir, f"animation_{subject_id}.gif")
-    anim.save(gif_file, writer="pillow", fps=5)
-    plt.close()
-
-    return gif_file
-
-
-def create_overlay_gif(image_files, subject_id, output_dir):
-    """Create an animated GIF switching between original and defaced."""
-
-    # Load the PNG images
-    orig_png_path = os.path.join(
-        output_dir, "images", image_files[0][2]
-    )  # original image
-    defaced_png_path = os.path.join(
-        output_dir, "images", image_files[1][2]
-    )  # defaced image
-
-    # Open images
-    orig_img = Image.open(orig_png_path)
-    defaced_img = Image.open(defaced_png_path)
-
-    # Ensure same size
-    if orig_img.size != defaced_img.size:
-        defaced_img = defaced_img.resize(orig_img.size, Image.Resampling.LANCZOS)
-
-    # Create frames for the GIF
-    frames = []
-
-    # Frame 1: Original
-    frames.append(orig_img.copy())
-
-    # Frame 2: Defaced
-    frames.append(defaced_img.copy())
-
-    # Save as GIF
-    gif_filename = f"overlay_{subject_id}.gif"
-    gif_path = os.path.join(output_dir, "images", gif_filename)
-    frames[0].save(
-        gif_path,
-        save_all=True,
-        append_images=frames[1:],
-        duration=1500,  # 1.5 seconds per frame
-        loop=0,
-    )
-
-    return gif_filename
-
-
-def load_and_preprocess_image(img_path):
-    """Load image and take mean if it has more than 3 dimensions.
-    Returns nibabel image if averaging was needed, otherwise returns original path."""
-    img = nib.load(img_path)
-
-    # Check if image has more than 3 dimensions
-    if len(img.shape) > 3:
-        print(
-            f"  Converting 4D image to 3D by taking mean: {os.path.basename(img_path)}"
-        )
-        # Take mean across the 4th dimension
-        data = img.get_fdata()
-        mean_data = np.mean(data, axis=3)
-        # Create new 3D image
-        img = nib.Nifti1Image(mean_data, img.affine, img.header)
-        return img  # Return nibabel image object
-    else:
-        return img_path  # Return original path if already 3D
-
-
-def create_comparison_html(
-    orig_img,
-    defaced_img,
-    subject_id,
-    output_dir,
-    display_mode="side-by-side",
-    size="compact",
-    orig_path=None,
-    defaced_path=None,
-):
-    """Create HTML comparison page for a subject using nilearn ortho views."""
-
-    # Get basenames for display - use actual filenames with BIDS suffixes if available
-    if orig_path and defaced_path:
-        orig_basename = os.path.basename(orig_path)
-        defaced_basename = os.path.basename(defaced_path)
-    else:
-        # Fallback to generic names if paths not provided
-        orig_basename = f"orig_{subject_id}.nii.gz"
-        defaced_basename = f"defaced_{subject_id}.nii.gz"
-
-    # Generate images and get their filenames
-    image_files = []
-    for label, img, basename, cmap in [
-        ("original", orig_img, orig_basename, "hot"),  # Colored for original
-        ("defaced", defaced_img, defaced_basename, "gray"),  # Grey for defaced
-    ]:
-        # Debug: Print what we're processing
-        print(f"Processing {label} image: {basename}")
-        print(f"  Image shape: {img.shape}")
-        print(f"  Image data type: {img.get_data_dtype()}")
-        print(
-            f"  Image min/max: {img.get_fdata().min():.3f}/{img.get_fdata().max():.3f}"
-        )
-
-        # Create single sagittal slice using matplotlib directly
-        img_data = img.get_fdata()
-        x_midpoint = img_data.shape[0] // 2  # Get middle slice index
-
-        # Extract the sagittal slice and rotate it properly using matrix multiplication
-        sagittal_slice = img_data[x_midpoint, :, :]
-
-        # Create 270-degree rotation matrix (to face left and right-side up)
-        angle_rad = np.radians(270)
-        cos_theta = np.cos(angle_rad)
-        sin_theta = np.sin(angle_rad)
-        rotation_matrix = np.array([[cos_theta, -sin_theta], [sin_theta, cos_theta]])
-
-        # Get image dimensions
-        h, w = sagittal_slice.shape
-
-        # Create coordinate grid
-        y, x = np.mgrid[0:h, 0:w]
-        coords = np.vstack([x.ravel(), y.ravel()])
-
-        # Center the coordinates
-        center = np.array([w / 2, h / 2]).reshape(2, 1)
-        coords_centered = coords - center
-
-        # Apply rotation
-        rotated_coords = rotation_matrix @ coords_centered
-
-        # Move back to original coordinate system
-        rotated_coords = rotated_coords + center
-
-        # Interpolate the rotated image
-        from scipy.interpolate import griddata
-
-        rotated_slice = griddata(
-            (rotated_coords[0], rotated_coords[1]),
-            sagittal_slice.ravel(),
-            (x, y),
-            method="linear",
-            fill_value=0,
-        )
-
-        # Crop the image to remove empty black space
-        # Find non-zero regions
-        non_zero_mask = rotated_slice > 0
-        if np.any(non_zero_mask):
-            # Get bounding box of non-zero pixels
-            rows = np.any(non_zero_mask, axis=1)
-            cols = np.any(non_zero_mask, axis=0)
-            rmin, rmax = np.where(rows)[0][[0, -1]]
-            cmin, cmax = np.where(cols)[0][[0, -1]]
-
-            # Add some padding
-            padding = 10
-            rmin = max(0, rmin - padding)
-            rmax = min(rotated_slice.shape[0], rmax + padding)
-            cmin = max(0, cmin - padding)
-            cmax = min(rotated_slice.shape[1], cmax + padding)
-
-            # Crop the image
-            cropped_slice = rotated_slice[rmin:rmax, cmin:cmax]
-        else:
-            cropped_slice = rotated_slice
-
-        # Create figure with matplotlib
-        fig, ax = plt.subplots(figsize=(8, 8))
-        im = ax.imshow(cropped_slice, cmap=cmap, aspect="equal")
-        ax.set_title(f"{label.title()}: {basename} ({cmap} colormap)")
-        ax.axis("off")
-
-        # Save as PNG
-        png_filename = f"{label}_{subject_id}.png"
-        png_path = os.path.join(output_dir, "images", png_filename)
-        fig.savefig(png_path, dpi=150)
-        plt.close(fig)
-
-        image_files.append((label, basename, png_filename))
-
-    # Create overlay GIF if we have both images
-    if len(image_files) == 2:
-        overlay_gif = create_overlay_gif(image_files, subject_id, output_dir)
-        image_files.append(("overlay", "comparison", overlay_gif))
-
-    # Create the comparison HTML with embedded images
-    html_content = f"""
+    # Create HTML content
+    html_content = """
     <!DOCTYPE html>
     <html>
     <head>
         <meta charset="utf-8">
-        <title>PET Deface Comparison - {subject_id}</title>
+    <title>PET Deface SVG Reports</title>
         <style>
-            body {{
+        body {
                 font-family: Arial, sans-serif;
                 margin: 20px;
                 background: #f5f5f5;
-                scroll-behavior: smooth;
-            }}
-            .header {{
+        }
+        
+        .header {
                 text-align: center;
                 margin-bottom: 30px;
                 color: #333;
-            }}
-            .comparison {{
-                display: flex;
-                justify-content: center;
-                gap: {20 if size == "compact" else 40}px;
-                margin-bottom: 20px;
-            }}
-            .viewer {{
+        }
+        
+        .svg-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            padding: 10px;
+        }
+        
+        .svg-item {
                 background: white;
-                padding: {20 if size == "compact" else 30}px;
-                border-radius: 10px;
-                box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-                text-align: center;
-                flex: 1;
-                max-width: {45 if size == "compact" else 48}%;
-            }}
-            .viewer h3 {{
-                margin-top: 0;
-                color: #2c3e50;
-                font-size: {14 if size == "compact" else 18}px;
-            }}
-            .viewer img {{
-                width: 100%;
-                height: auto;
-                border-radius: 8px;
-                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-            }}
-            .navigation {{
-                position: fixed;
-                top: 20px;
-                right: 20px;
-                background: white;
-                padding: 15px;
-                border-radius: 10px;
-                box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-                z-index: 1000;
-            }}
-            .nav-button {{
-                display: block;
-                margin: 5px 0;
-                padding: 8px 12px;
-                background: #3498db;
-                color: white;
-                border: none;
+            padding: 10px;
                 border-radius: 5px;
-                cursor: pointer;
-                font-size: 12px;
-                text-decoration: none;
-            }}
-            .nav-button:hover {{
-                background: #2980b9;
-            }}
-            .nav-button:disabled {{
-                background: #bdc3c7;
-                cursor: not-allowed;
-            }}
-        </style>
-        <script>
-            function scrollToComparison(direction) {{
-                const comparisons = document.querySelectorAll('.comparison');
-                const currentScroll = window.pageYOffset;
-                const windowHeight = window.innerHeight;
-                
-                let targetComparison = null;
-                
-                if (direction === 'next') {{
-                    for (let comp of comparisons) {{
-                        if (comp.offsetTop > currentScroll + windowHeight * 0.3) {{
-                            targetComparison = comp;
-                            break;
-                        }}
-                    }}
-                    if (!targetComparison && comparisons.length > 0) {{
-                        targetComparison = comparisons[0];
-                    }}
-                }} else if (direction === 'prev') {{
-                    for (let i = comparisons.length - 1; i >= 0; i--) {{
-                        if (comparisons[i].offsetTop < currentScroll - windowHeight * 0.3) {{
-                            targetComparison = comparisons[i];
-                            break;
-                        }}
-                    }}
-                    if (!targetComparison && comparisons.length > 0) {{
-                        targetComparison = comparisons[comparisons.length - 1];
-                    }}
-                }}
-                
-                if (targetComparison) {{
-                    targetComparison.scrollIntoView({{ behavior: 'smooth', block: 'center' }});
-                }}
-            }}
-            
-            // Keyboard navigation
-            document.addEventListener('keydown', function(e) {{
-                if (e.key === 'ArrowDown' || e.key === ' ') {{
-                    e.preventDefault();
-                    scrollToComparison('next');
-                }} else if (e.key === 'ArrowUp') {{
-                    e.preventDefault();
-                    scrollToComparison('prev');
-                }}
-            }});
-        </script>
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            text-align: center;
+            min-height: 90vh;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .svg-item h3 {
+            margin: 0 0 10px 0;
+            color: #2c3e50;
+            font-size: 16px;
+            word-break: break-all;
+        }
+        
+        .svg-item svg {
+            flex: 1;
+            max-width: 100%;
+            max-height: calc(90vh - 50px);
+            width: auto;
+            height: auto;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+    </style>
     </head>
     <body>
-        <div class="navigation">
-            <button class="nav-button" onclick="scrollToComparison('prev')">↑ Previous</button>
-            <button class="nav-button" onclick="scrollToComparison('next')">↓ Next</button>
-            <div style="margin-top: 10px; font-size: 10px; color: #666;">
-                Use arrow keys or spacebar
-            </div>
-        </div>
-        
         <div class="header">
-            <h1>PET Deface Comparison - {subject_id}</h1>
-            <p>Side-by-side comparison of original vs defaced neuroimaging data</p>
+        <h1>PET Deface SVG Reports</h1>
+        <p>All generated SVG reports</p>
         </div>
         
-        <div class="comparison">
-    """
+    <div class="svg-grid">
+"""
 
-    # Add content based on display mode
-    if display_mode == "side-by-side":
-        # Add images side by side only
+    # Add all SVG files
+    for svg_file in svg_files:
+        filename = os.path.basename(svg_file)
+        with open(svg_file, "r") as f:
+            svg_content = f.read()
+
         html_content += f"""
-            <div class="viewer">
-                <h3>{image_files[0][0].title()}: {image_files[0][1]}</h3>
-                <img src="{image_files[0][2]}" alt="{image_files[0][0].title()}: {image_files[0][1]}">
-            </div>
-            <div class="viewer">
-                <h3>{image_files[1][0].title()}: {image_files[1][1]}</h3>
-                <img src="{image_files[1][2]}" alt="{image_files[1][0].title()}: {image_files[1][1]}">
-            </div>
-        </div>
-        """
-    elif display_mode == "gif":
-        # Show only the GIF
-        if len(image_files) > 2:
-            html_content += f"""
-            <div style="text-align: center;">
-                <h3>Animated Comparison</h3>
-                <p>Switching between Original and Defaced images</p>
-                <img src="{image_files[2][2]}" alt="Animated comparison" style="max-width: 90%; border-radius: 8px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);">
-            </div>
-        </div>
-        """
-        else:
-            html_content += """
+        <div class="svg-item">
+            <h3>{filename}</h3>
+            {svg_content}
         </div>
         """
 
     html_content += """
-        <div style="text-align: center; margin-top: 30px;">
-            <a href="index.html">← Back to Index</a>
         </div>
     </body>
     </html>
     """
 
-    # Save the comparison HTML
-    comparison_file = os.path.join(output_dir, f"comparison_{subject_id}.html")
-    with open(comparison_file, "w") as f:
+    # Write the HTML file
+    html_file = os.path.join(output_dir, "svg_reports.html")
+    with open(html_file, "w") as f:
         f.write(html_content)
 
-    return comparison_file
-
-
-def process_subject(subject, output_dir, size="compact"):
-    """Process a single subject (for parallel processing)."""
-    print(f"Processing {subject['id']}...")
-    try:
-        comparison_file = create_comparison_html(
-            subject["orig_img"],
-            subject["defaced_img"],
-            subject["id"],
-            output_dir,
-            "side-by-side",  # Always generate side-by-side for individual pages
-            size,
-            subject["orig_path"],
-            subject["defaced_path"],
-        )
-        print(f"  Completed: {subject['id']}")
-        return comparison_file
-    except Exception as e:
-        print(f"  Error processing {subject['id']}: {e}")
-        return None
-
-
-def build_subjects_from_datasets(orig_dir, defaced_dir):
-    """Build subject list with file paths."""
-
-    # Get all NIfTI files but exclude derivatives and workflow folders
-    def get_nifti_files(directory):
-        all_files = glob(os.path.join(directory, "**", "*.nii*"), recursive=True)
-        # Filter out files in derivatives, workflow, or other processing folders
-        filtered_files = []
-        for file_path in all_files:
-            # Skip files in derivatives, workflow, or processing-related directories
-            path_parts = file_path.split(os.sep)
-            skip_dirs = ["derivatives", "work", "wf", "tmp", "temp", "scratch", "cache"]
-            if not any(skip_dir in path_parts for skip_dir in skip_dirs):
-                filtered_files.append(file_path)
-        return filtered_files
-
-    orig_files = get_nifti_files(orig_dir)
-    defaced_files = get_nifti_files(defaced_dir)
-
-    def strip_ext(path):
-        base = os.path.basename(path)
-        if base.endswith(".gz"):
-            base = os.path.splitext(os.path.splitext(base)[0])[0]
-        else:
-            base = os.path.splitext(base)[0]
-        return base
-
-    def get_unique_key(file_path):
-        """Create a unique key that includes session information."""
-        parts = file_path.split(os.sep)
-        sub_id = next((p for p in parts if p.startswith("sub-")), "")
-        session = next((p for p in parts if p.startswith("ses-")), "")
-        basename = strip_ext(file_path)
-
-        # Create unique key that includes session if present
-        if session:
-            return f"{sub_id}_{session}_{basename}"
-        else:
-            return f"{sub_id}_{basename}"
-
-    # Create maps with unique keys
-    orig_map = {get_unique_key(f): f for f in orig_files}
-    defaced_map = {get_unique_key(f): f for f in defaced_files}
-    common_keys = sorted(set(orig_map.keys()) & set(defaced_map.keys()))
-
-    # Debug: Print what files are being found
-    print(f"Found {len(orig_files)} files in original directory")
-    print(f"Found {len(defaced_files)} files in defaced directory")
-    print(f"Found {len(common_keys)} common files")
-    for key in common_keys:
-        print(f"  {key}: {orig_map[key]} -> {defaced_map[key]}")
-
-    subjects = []
-    for key in common_keys:
-        orig_path = orig_map[key]
-        defaced_path = defaced_map[key]
-        parts = orig_path.split(os.sep)
-        sub_id = next((p for p in parts if p.startswith("sub-")), key)
-        session = next((p for p in parts if p.startswith("ses-")), "")
-
-        # Create a unique subject ID that includes session if present
-        if session:
-            subject_id = f"{sub_id}_{session}"
-        else:
-            subject_id = sub_id
-
-        # Check if this is a T1w file (prioritize T1w over PET)
-        is_t1w = "T1w" in orig_path or "T1w" in defaced_path
-
-        subjects.append(
-            {
-                "id": subject_id,
-                "orig_path": orig_path,
-                "defaced_path": defaced_path,
-                "is_t1w": is_t1w,
-            }
-        )
-
-    # Sort subjects to prioritize T1w files over PET files
-    subjects.sort(key=lambda x: (not x["is_t1w"], x["id"]))
-
-    # For each subject, only keep the T1w file if available, otherwise keep the first file
-    filtered_subjects = []
-    seen_subjects = set()
-
-    for subject in subjects:
-        subject_id = subject["id"]
-        if subject_id not in seen_subjects:
-            filtered_subjects.append(subject)
-            seen_subjects.add(subject_id)
-        elif subject["is_t1w"]:
-            # Replace the existing entry with the T1w version
-            filtered_subjects = [s for s in filtered_subjects if s["id"] != subject_id]
-            filtered_subjects.append(subject)
-
-    if not filtered_subjects:
-        print("No matching NIfTI files found in both datasets.")
-        exit(1)
-
-    return filtered_subjects
-
-
-def create_side_by_side_index_html(subjects, output_dir, size="compact"):
-    """Create index page for side-by-side comparisons."""
-
-    comparisons_html = ""
-    for subject in subjects:
-        subject_id = subject["id"]
-
-        # Use actual filenames with BIDS suffixes instead of generic names
-        orig_basename = os.path.basename(subject["orig_path"])
-        defaced_basename = os.path.basename(subject["defaced_path"])
-
-        # Check if the PNG files exist
-        orig_png = f"images/original_{subject_id}.png"
-        defaced_png = f"images/defaced_{subject_id}.png"
-
-        comparisons_html += f"""
-        <div class="subject-comparison">
-            <h2>{subject_id}</h2>
-            <div class="comparison-grid">
-                <div class="viewer">
-                    <h3>Original: {orig_basename}</h3>
-                    <img src="{orig_png}" alt="Original: {orig_basename}">
-                </div>
-                <div class="viewer">
-                    <h3>Defaced: {defaced_basename}</h3>
-                    <img src="{defaced_png}" alt="Defaced: {defaced_basename}">
-                </div>
-            </div>
-        </div>
-        """
-
-    html_content = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <meta charset="utf-8">
-        <title>PET Deface Comparisons - Side by Side</title>
-        <style>
-            body {{
-                font-family: Arial, sans-serif;
-                margin: 20px;
-                background: #f5f5f5;
-                scroll-behavior: smooth;
-            }}
-            .header {{
-                text-align: center;
-                margin-bottom: 30px;
-                color: #333;
-            }}
-            .subject-comparison {{
-                background: white;
-                margin-bottom: 40px;
-                padding: {30 if size == "compact" else 40}px;
-                border-radius: 15px;
-                box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-            }}
-            .subject-comparison h2 {{
-                color: #2c3e50;
-                margin-top: 0;
-                margin-bottom: 20px;
-                text-align: center;
-                font-size: {1.5 if size == "compact" else 2}em;
-            }}
-            .comparison-grid {{
-                display: grid;
-                grid-template-columns: 1fr 1fr;
-                gap: {30 if size == "compact" else 40}px;
-                align-items: start;
-            }}
-            .viewer {{
-                text-align: center;
-            }}
-            .viewer h3 {{
-                color: #34495e;
-                margin-bottom: 15px;
-                font-size: {1.1 if size == "compact" else 1.3}em;
-            }}
-            .viewer img {{
-                width: 100%;
-                height: auto;
-                border-radius: 8px;
-                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-            }}
-            .navigation {{
-                position: fixed;
-                top: 20px;
-                right: 20px;
-                background: white;
-                padding: 15px;
-                border-radius: 10px;
-                box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-                z-index: 1000;
-            }}
-            .nav-button {{
-                display: block;
-                margin: 5px 0;
-                padding: 8px 12px;
-                background: #3498db;
-                color: white;
-                border: none;
-                border-radius: 5px;
-                cursor: pointer;
-                font-size: 12px;
-                text-decoration: none;
-            }}
-            .nav-button:hover {{
-                background: #2980b9;
-            }}
-            .nav-button:disabled {{
-                background: #bdc3c7;
-                cursor: not-allowed;
-            }}
-        </style>
-        <script>
-            function scrollToComparison(direction) {{
-                const comparisons = document.querySelectorAll('.subject-comparison');
-                const currentScroll = window.pageYOffset;
-                const windowHeight = window.innerHeight;
-                let targetComparison = null;
-                if (direction === 'next') {{
-                    for (let comp of comparisons) {{
-                        if (comp.offsetTop > currentScroll + windowHeight * 0.3) {{
-                            targetComparison = comp;
-                            break;
-                        }}
-                    }}
-                    if (!targetComparison && comparisons.length > 0) {{
-                        targetComparison = comparisons[0];
-                    }}
-                }} else if (direction === 'prev') {{
-                    for (let i = comparisons.length - 1; i >= 0; i--) {{
-                        if (comparisons[i].offsetTop < currentScroll - windowHeight * 0.3) {{
-                            targetComparison = comparisons[i];
-                            break;
-                        }}
-                    }}
-                    if (!targetComparison && comparisons.length > 0) {{
-                        targetComparison = comparisons[comparisons.length - 1];
-                    }}
-                }}
-                
-                if (targetComparison) {{
-                    targetComparison.scrollIntoView({{ behavior: 'smooth', block: 'center' }});
-                }}
-            }}
-            
-            // Keyboard navigation
-            document.addEventListener('keydown', function(e) {{
-                if (e.key === 'ArrowDown' || e.key === ' ') {{
-                    e.preventDefault();
-                    scrollToComparison('next');
-                }} else if (e.key === 'ArrowUp') {{
-                    e.preventDefault();
-                    scrollToComparison('prev');
-                }}
-            }});
-        </script>
-    </head>
-    <body>
-        <div class="navigation">
-            <button class="nav-button" onclick="scrollToComparison('prev')">↑ Previous</button>
-            <button class="nav-button" onclick="scrollToComparison('next')">↓ Next</button>
-            <div style="margin-top: 10px; font-size: 10px; color: #666;">
-                Use arrow keys or spacebar
-            </div>
-        </div>
-        
-        <div class="header">
-            <h1>PET Deface Comparisons - Side by Side</h1>
-            <p>Static side-by-side comparison of original vs defaced neuroimaging data</p>
-        </div>
-        
-        <div class="comparisons-container">
-            {comparisons_html}
-        </div>
-    </body>
-    </html>
-    """
-
-    index_file = os.path.join(output_dir, "side_by_side.html")
-    with open(index_file, "w") as f:
-        f.write(html_content)
-
-    return index_file
-
-
-def create_gif_index_html(subjects, output_dir, size="compact"):
-    """Create index page for GIF comparisons."""
-
-    comparisons_html = ""
-    for subject in subjects:
-        subject_id = subject["id"]
-        overlay_gif = f"images/overlay_{subject_id}.gif"
-
-        comparisons_html += f"""
-        <div class="subject-comparison">
-            <h2>{subject_id}</h2>
-            <div style="text-align: center;">
-                <h3>Animated Comparison</h3>
-                <p>Switching between Original and Defaced images</p>
-                <img src="{overlay_gif}" alt="Animated comparison" style="max-width: 63%; border-radius: 8px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);">
-            </div>
-        </div>
-        """
-
-    html_content = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <meta charset="utf-8">
-        <title>PET Deface Comparisons - Animated</title>
-        <style>
-            body {{
-                font-family: Arial, sans-serif;
-                margin: 20px;
-                background: #f5f5f5;
-                scroll-behavior: smooth;
-            }}
-            .header {{
-                text-align: center;
-                margin-bottom: 30px;
-                color: #333;
-            }}
-            .subject-comparison {{
-                background: white;
-                margin-bottom: 40px;
-                padding: {30 if size == "compact" else 40}px;
-                border-radius: 15px;
-                box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-            }}
-            .subject-comparison h2 {{
-                color: #2c3e50;
-                margin-top: 0;
-                margin-bottom: 20px;
-                text-align: center;
-                font-size: {1.5 if size == "compact" else 2}em;
-            }}
-            .navigation {{
-                position: fixed;
-                top: 20px;
-                right: 20px;
-                background: white;
-                padding: 15px;
-                border-radius: 10px;
-                box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-                z-index: 1000;
-            }}
-            .nav-button {{
-                display: block;
-                margin: 5px 0;
-                padding: 8px 12px;
-                background: #3498db;
-                color: white;
-                border: none;
-                border-radius: 5px;
-                cursor: pointer;
-                font-size: 12px;
-                text-decoration: none;
-            }}
-            .nav-button:hover {{
-                background: #2980b9;
-            }}
-            .nav-button:disabled {{
-                background: #bdc3c7;
-                cursor: not-allowed;
-            }}
-        </style>
-        <script>
-            function scrollToComparison(direction) {{
-                const comparisons = document.querySelectorAll('.subject-comparison');
-                const currentScroll = window.pageYOffset;
-                const windowHeight = window.innerHeight;
-                let targetComparison = null;
-                if (direction === 'next') {{
-                    for (let comp of comparisons) {{
-                        if (comp.offsetTop > currentScroll + windowHeight * 0.3) {{
-                            targetComparison = comp;
-                            break;
-                        }}
-                    }}
-                    if (!targetComparison && comparisons.length > 0) {{
-                        targetComparison = comparisons[0];
-                    }}
-                }} else if (direction === 'prev') {{
-                    for (let i = comparisons.length - 1; i >= 0; i--) {{
-                        if (comparisons[i].offsetTop < currentScroll - windowHeight * 0.3) {{
-                            targetComparison = comparisons[i];
-                            break;
-                        }}
-                    }}
-                    if (!targetComparison && comparisons.length > 0) {{
-                        targetComparison = comparisons[comparisons.length - 1];
-                    }}
-                }}
-                
-                if (targetComparison) {{
-                    targetComparison.scrollIntoView({{ behavior: 'smooth', block: 'center' }});
-                }}
-            }}
-            
-            // Keyboard navigation
-            document.addEventListener('keydown', function(e) {{
-                if (e.key === 'ArrowDown' || e.key === ' ') {{
-                    e.preventDefault();
-                    scrollToComparison('next');
-                }} else if (e.key === 'ArrowUp') {{
-                    e.preventDefault();
-                    scrollToComparison('prev');
-                }}
-            }});
-        </script>
-    </head>
-    <body>
-        <div class="navigation">
-            <button class="nav-button" onclick="scrollToComparison('prev')">↑ Previous</button>
-            <button class="nav-button" onclick="scrollToComparison('next')">↓ Next</button>
-            <div style="margin-top: 10px; font-size: 10px; color: #666;">
-                Use arrow keys or spacebar
-            </div>
-        </div>
-        
-        <div class="header">
-            <h1>PET Deface Comparisons - Animated</h1>
-            <p>Animated GIF comparison of original vs defaced neuroimaging data</p>
-        </div>
-        
-        <div class="comparisons-container">
-            {comparisons_html}
-        </div>
-    </body>
-    </html>
-    """
-
-    index_file = os.path.join(output_dir, "animated.html")
-    with open(index_file, "w") as f:
-        f.write(html_content)
-
-    return index_file
+    return html_file
 
 
 def run_qa(
-    faced_dir,
     defaced_dir,
     output_dir=None,
-    subject=None,
-    n_jobs=None,
-    size="compact",
     open_browser=False,
+    start_server=False,
+    server_port=8000,
 ):
     """
-    Run QA report generation programmatically.
+    Run QA report generation for SVG reports in derivatives/petdeface.
 
     Args:
-        faced_dir (str): Path to original (faced) dataset directory
-        defaced_dir (str): Path to defaced dataset directory
-        output_dir (str, optional): Output directory for HTML files
-        subject (str, optional): Filter to specific subject
-        n_jobs (int, optional): Number of parallel jobs
-        size (str): Image size - 'compact' or 'full'
+        defaced_dir (str): Path to defaced dataset directory (containing derivatives/petdeface)
+        output_dir (str, optional): Output directory for HTML files (defaults to derivatives/petdeface/qa/)
         open_browser (bool): Whether to open browser automatically
+        start_server (bool): Whether to start a local HTTP server for NIfTI files
+        server_port (int): Port for the HTTP server
 
     Returns:
         dict: Information about generated files
     """
-    faced_dir = os.path.abspath(faced_dir)
     defaced_dir = os.path.abspath(defaced_dir)
 
-    # Create output directory name based on input directories
+    # Create output directory in derivatives/petdeface/qa/
     if output_dir:
         output_dir = os.path.abspath(output_dir)
     else:
-        orig_folder = os.path.basename(faced_dir)
-        defaced_folder = os.path.basename(defaced_dir)
-        output_dir = os.path.abspath(f"{orig_folder}_{defaced_folder}_qa")
+        # Look for derivatives/petdeface directory
+        derivatives_dir = os.path.join(defaced_dir, "derivatives", "petdeface")
+        if not os.path.exists(derivatives_dir):
+            print(
+                f"Warning: derivatives/petdeface directory not found at {derivatives_dir}"
+            )
+            print("Looking for derivatives directory in parent...")
+            # Try parent directory (in case defaced_dir is the derivatives folder)
+            derivatives_dir = os.path.join(
+                os.path.dirname(defaced_dir), "derivatives", "petdeface"
+            )
+            if not os.path.exists(derivatives_dir):
+                print(
+                    f"Warning: derivatives/petdeface directory not found at {derivatives_dir}"
+                )
+                print("Creating QA output in current directory...")
+                output_dir = os.path.abspath("qa_reports")
+            else:
+                output_dir = os.path.join(derivatives_dir, "qa")
+        else:
+            output_dir = os.path.join(derivatives_dir, "qa")
 
-    # Create output directory and images subdirectory
+    # Create output directory
     os.makedirs(output_dir, exist_ok=True)
-    os.makedirs(os.path.join(output_dir, "images"), exist_ok=True)
     print(f"Output directory: {output_dir}")
 
-    # Build subjects list
-    subjects = build_subjects_from_datasets(faced_dir, defaced_dir)
-    print(f"Found {len(subjects)} subjects with matching files")
+    # Collect SVG reports
+    print(f"Collecting SVG reports from {defaced_dir}...")
+    svg_files = collect_svg_reports(defaced_dir, output_dir)
 
-    # Filter to specific subject if requested
-    if subject:
-        original_count = len(subjects)
-        subjects = [s for s in subjects if subject in s["id"]]
-        print(
-            f"Filtered to {len(subjects)} subjects matching '{subject}' (from {original_count} total)"
-        )
+    if not svg_files:
+        print("No SVG files found to process!")
+        return {"output_dir": output_dir, "error": "No SVG files found"}
 
-        if not subjects:
-            print(f"No subjects found matching '{subject}'")
-            print("Available subjects:")
-            all_subjects = build_subjects_from_datasets(faced_dir, defaced_dir)
-            for s in all_subjects:
-                print(f"  - {s['id']}")
-            raise ValueError(f"No subjects found matching '{subject}'")
+    # Create HTML viewer for SVG reports
+    print("Creating SVG HTML viewer...")
+    svg_html_file = create_simple_viewer_html(svg_files, output_dir)
 
-    # Set number of jobs for parallel processing
-    if n_jobs is None:
-        n_jobs = mp.cpu_count()
-    print(f"Using {n_jobs} parallel processes")
+    # Collect and create NIfTI viewers
+    print("Collecting NIfTI files...")
+    nifti_files_by_subject = collect_nifti_files(defaced_dir)
 
-    # Preprocess all images once (4D→3D conversion)
-    preprocessed_subjects = preprocess_images(subjects, output_dir, n_jobs)
+    nifti_viewer_files = []
+    if nifti_files_by_subject:
+        print("Creating NIfTI viewers...")
+        for subject_id, nifti_files in nifti_files_by_subject.items():
+            viewer_file = create_nifti_viewer_html(
+                subject_id, nifti_files, output_dir, server_port
+            )
+            if viewer_file:
+                nifti_viewer_files.append(viewer_file)
+    else:
+        print("No NIfTI files found for viewing")
 
-    # create nireports svg's for comparison
-    generate_simple_before_and_after(
-        preprocessed_subjects=preprocessed_subjects, output_dir=output_dir
-    )
+    # Generate NIfTI viewer links with server detection
+    nifti_links = ""
+    for viewer_file in nifti_viewer_files:
+        viewer_name = Path(viewer_file).name
+        subject_id = viewer_name.replace("_nifti_viewer.html", "")
+        nifti_links += f'<a href="{viewer_name}" class="link-button nifti-link" data-subject="{subject_id}">{subject_id} NIfTI Viewer</a>\n            '
 
-    # Process subjects in parallel
-    print("Generating comparisons...")
-    with mp.Pool(processes=n_jobs) as pool:
-        # Create a partial function with the output_dir and size fixed
-        process_func = partial(
-            process_subject,
-            output_dir=output_dir,
-            size=size,
-        )
-
-        # Process all subjects in parallel
-        results = pool.map(process_func, preprocessed_subjects)
-
-    # Count successful results
-    successful = [r for r in results if r is not None]
-    print(
-        f"Successfully processed {len(successful)} out of {len(preprocessed_subjects)} subjects"
-    )
-
-    # Create both HTML files
-    side_by_side_file = create_side_by_side_index_html(
-        preprocessed_subjects, output_dir, size
-    )
-    animated_file = create_gif_index_html(preprocessed_subjects, output_dir, size)
-
-    # Create a simple index that links to both
+    # Create simple index
     index_html = f"""
     <!DOCTYPE html>
     <html>
     <head>
         <meta charset="utf-8">
-        <title>PET Deface Comparisons</title>
+    <title>PET Deface QA Reports</title>
         <style>
             body {{
                 font-family: Arial, sans-serif;
-                margin: 50px;
+            margin: 20px;
                 background: #f5f5f5;
+        }}
+        .header {{
                 text-align: center;
+            margin-bottom: 30px;
+            color: #333;
             }}
-            .container {{
-                max-width: 600px;
-                margin: 0 auto;
+        .content {{
                 background: white;
-                padding: 40px;
-                border-radius: 15px;
-                box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-            }}
-            h1 {{
-                color: #2c3e50;
-                margin-bottom: 30px;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            text-align: center;
             }}
             .link-button {{
                 display: inline-block;
-                margin: 15px;
-                padding: 15px 30px;
+            margin: 10px;
+            padding: 15px 25px;
                 background: #3498db;
                 color: white;
                 text-decoration: none;
-                border-radius: 8px;
+            border-radius: 5px;
+            font-weight: bold;
                 font-size: 16px;
-                transition: background 0.3s;
             }}
             .link-button:hover {{
                 background: #2980b9;
             }}
-            .description {{
-                color: #666;
-                margin-bottom: 30px;
-            }}
         </style>
     </head>
     <body>
-        <div class="container">
-            <h1>PET Deface Comparisons</h1>
-            <p class="description">Choose your preferred viewing mode:</p>
-            
-            <a href="side_by_side.html" class="link-button">Side by Side View</a>
-            <a href="animated.html" class="link-button">Animated GIF View</a>
-            <a href="SimpleBeforeAfterRPT.html" class="link-button">SVG Reports View</a>
-            
-            <p style="margin-top: 30px; color: #999; font-size: 14px;">
-                Generated with {len(preprocessed_subjects)} subjects
+    <div class="header">
+        <h1>PET Deface QA Reports</h1>
+        <p>Quality assessment reports for defacing workflow</p>
+    </div>
+    
+    <div class="content">
+        <h2>Available Reports</h2>
+        
+        <div style="margin-bottom: 30px;">
+            <h3>SVG Reports</h3>
+            <p>Click the link below to view all SVG reports:</p>
+            <a href="svg_reports.html" class="link-button">View All SVG Reports</a>
+            <p style="margin-top: 10px; color: #666;">
+                Found {len(svg_files)} SVG report(s)
             </p>
         </div>
+        
+        <div style="margin-bottom: 30px;">
+            <h3>NIfTI Viewers</h3>
+            <p>Click the links below to view rotating 3D NIfTI images:</p>
+            <div id="nifti-links-container">
+                {nifti_links}
+            </div>
+            <p style="margin-top: 10px; color: #666;">
+                Found {len(nifti_viewer_files)} NIfTI viewer(s)
+            </p>
+            <div id="server-status" style="margin-top: 10px; padding: 10px; border-radius: 5px; display: none;">
+                <p id="server-message" style="margin: 0; font-weight: bold;"></p>
+                <div id="command-help" style="display: none; margin-top: 15px;">
+                    <p style="margin: 10px 0; font-weight: normal;">To start the NIfTI preview server, run this command in your terminal:</p>
+                    <div id="command-text" style="background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 5px; padding: 10px; font-family: 'Courier New', monospace; font-size: 12px; text-align: left; word-break: break-all; margin: 10px 0;"></div>
+                    <button onclick="copyCommand()" style="background: #28a745; color: white; border: none; padding: 6px 12px; border-radius: 3px; cursor: pointer; font-size: 11px;">Copy Command</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // Check if NIfTI server is available
+        async function checkServerAvailability() {{
+            const serverStatus = document.getElementById('server-status');
+            const serverMessage = document.getElementById('server-message');
+            const commandHelp = document.getElementById('command-help');
+            const commandText = document.getElementById('command-text');
+            const niftiLinks = document.querySelectorAll('.nifti-link');
+            const serverPort = {server_port};
+            const defacedDir = "{defaced_dir}";
+            
+            try {{
+                // Try to fetch a simple request to the server
+                const response = await fetch(`http://localhost:${{serverPort}}/`, {{ 
+                    method: 'HEAD',
+                    mode: 'no-cors'  // This allows us to check if server responds without CORS issues
+                }});
+                
+                // If we get here, server is available
+                serverStatus.style.display = 'block';
+                serverStatus.style.backgroundColor = '#d4edda';
+                serverStatus.style.border = '1px solid #c3e6cb';
+                serverMessage.style.color = '#155724';
+                serverMessage.textContent = `✓ NIfTI preview server is running on port ${{serverPort}}`;
+                
+                // Enable all NIfTI links
+                niftiLinks.forEach(link => {{
+                    link.style.opacity = '1';
+                    link.style.pointerEvents = 'auto';
+                }});
+                
+            }} catch (error) {{
+                // Server is not available
+                serverStatus.style.display = 'block';
+                serverStatus.style.backgroundColor = '#f8d7da';
+                serverStatus.style.border = '1px solid #f5c6cb';
+                serverMessage.style.color = '#721c24';
+                serverMessage.textContent = `✗ NIfTI preview server is not running on port ${{serverPort}}. NIfTI viewers will not work.`;
+                
+                // Show command help
+                commandHelp.style.display = 'block';
+                const command = `petdeface-qa "${{defacedDir}}" --start-server --open-browser`;
+                commandText.textContent = command;
+                
+                // Disable all NIfTI links
+                niftiLinks.forEach(link => {{
+                    link.style.opacity = '0.5';
+                    link.style.pointerEvents = 'none';
+                    link.title = 'NIfTI server not available';
+                }});
+            }}
+        }}
+        
+        // Copy command to clipboard
+        function copyCommand() {{
+            const commandText = document.getElementById('command-text');
+            navigator.clipboard.writeText(commandText.textContent).then(() => {{
+                const button = event.target;
+                const originalText = button.textContent;
+                button.textContent = 'Copied!';
+                button.style.background = '#6c757d';
+                setTimeout(() => {{
+                    button.textContent = originalText;
+                    button.style.background = '#28a745';
+                }}, 2000);
+            }});
+        }}
+        
+        // Check server availability when page loads
+        document.addEventListener('DOMContentLoaded', function() {{
+            checkServerAvailability();
+        }});
+    </script>
     </body>
     </html>
     """
@@ -1409,42 +794,10 @@ def run_qa(
     with open(index_file, "w") as f:
         f.write(index_html)
 
-    # Save the command with full expanded paths
-    import sys
-
-    command_parts = [
-        sys.executable,
-        os.path.abspath(__file__),
-        "--faced-dir",
-        faced_dir,
-        "--defaced-dir",
-        defaced_dir,
-        "--output-dir",
-        output_dir,
-        "--size",
-        size,
-    ]
-    if n_jobs:
-        command_parts.extend(["--n-jobs", str(n_jobs)])
-    if subject:
-        command_parts.extend(["--subject", subject])
-    if open_browser:
-        command_parts.append("--open-browser")
-
-    command_str = " ".join(command_parts)
-
-    command_file = os.path.join(output_dir, "command.txt")
-    with open(command_file, "w") as f:
-        f.write(f"# Command used to generate this comparison\n")
-        f.write(
-            f"# Generated on: {__import__('datetime').datetime.now().isoformat()}\n\n"
-        )
-        f.write(command_str + "\n")
-
-    print(f"Created side-by-side view: {side_by_side_file}")
-    print(f"Created animated view: {animated_file}")
-    print(f"Created main report: {index_file}")
-    print(f"Saved command to: {command_file}")
+    print(f"Created main index: {index_file}")
+    print(f"Created SVG viewer: {svg_html_file}")
+    if nifti_viewer_files:
+        print(f"Created {len(nifti_viewer_files)} NIfTI viewer(s)")
 
     # Open browser if requested
     if open_browser:
@@ -1452,65 +805,80 @@ def run_qa(
         print(f"Opened browser to: {index_file}")
 
     print(f"\nAll files generated in: {output_dir}")
-    print(f"Open petdeface_report.html in your browser to view comparisons")
+    print(f"Open index.html in your browser to view reports")
+
+    # Start server if requested
+    if start_server and nifti_viewer_files:
+        print(f"\nStarting HTTP server on port {server_port}...")
+        print("This server is needed for NIfTI file access due to CORS restrictions.")
+        print("Keep this terminal open while viewing NIfTI files.")
+
+        # Kill any existing process on the port
+        kill_process_on_port(server_port)
+
+        # Get the derivatives directory to serve from
+        derivatives_dir = os.path.join(os.path.dirname(output_dir), "..")
+
+        print(f"Server is running at http://localhost:{server_port}")
+        print("NIfTI viewers will now work properly.")
+        print("Press Ctrl+C to stop the server")
+
+        # Start server in foreground (this will block)
+        start_local_server(server_port, derivatives_dir)
 
     return {
         "output_dir": output_dir,
-        "side_by_side_file": side_by_side_file,
-        "animated_file": animated_file,
-        "report_file": index_file,
-        "command_file": command_file,
-        "subjects_processed": len(successful),
-        "total_subjects": len(preprocessed_subjects),
+        "index_file": index_file,
+        "svg_viewer": svg_html_file,
+        "svg_files_count": len(svg_files),
+        "nifti_viewers": nifti_viewer_files,
+        "nifti_viewers_count": len(nifti_viewer_files),
+        "server_started": start_server and nifti_viewer_files,
+        "server_port": server_port if start_server and nifti_viewer_files else None,
     }
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Generate static HTML comparisons of PET deface results using nilearn."
+        description="Generate SVG QA reports for PET deface workflow."
     )
     parser.add_argument(
-        "--faced-dir", required=True, help="Directory for original (faced) dataset"
-    )
-    parser.add_argument(
-        "--defaced-dir", required=True, help="Directory for defaced dataset"
+        "bids_dir",
+        help="BIDS directory containing the defaced dataset (with derivatives/petdeface)",
     )
     parser.add_argument(
         "--output-dir",
-        help="Output directory for HTML files (default: {orig_folder}_{defaced_folder}_qa)",
+        "--output_dir",
+        help="Output directory for HTML files (default: derivatives/petdeface/qa/)",
     )
     parser.add_argument(
-        "--open-browser", action="store_true", help="Open browser automatically"
+        "--open-browser",
+        "--open_browser",
+        action="store_true",
+        help="Open browser automatically",
     )
     parser.add_argument(
-        "--n-jobs",
+        "--start-server",
+        "--start_server",
+        action="store_true",
+        help="Start local HTTP server for NIfTI file access (required for NIfTI viewers)",
+    )
+    parser.add_argument(
+        "--qa-port",
+        "--qa_port",
         type=int,
-        default=None,
-        help="Number of parallel jobs (default: all cores)",
-    )
-    parser.add_argument(
-        "--subject",
-        type=str,
-        help="Filter to specific subject (e.g., 'sub-01' or 'sub-01_ses-baseline')",
+        default=8000,
+        help="User can manually choose a default port to serve the nifti images at for 3D previewing of defacing should the default value of 8000 not work.",
     )
 
-    parser.add_argument(
-        "--size",
-        type=str,
-        choices=["compact", "full"],
-        default="compact",
-        help="Image size: 'compact' for closer together or 'full' for entire page width",
-    )
     args = parser.parse_args()
 
     return run_qa(
-        faced_dir=args.faced_dir,
-        defaced_dir=args.defaced_dir,
+        defaced_dir=args.bids_dir,
         output_dir=args.output_dir,
-        subject=args.subject,
-        n_jobs=args.n_jobs,
-        size=args.size,
         open_browser=args.open_browser,
+        start_server=args.start_server,
+        server_port=args.qa_port,
     )
 
 
