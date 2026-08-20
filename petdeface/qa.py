@@ -1,19 +1,20 @@
 #!/usr/bin/env python3
+
 """
 Simple QA system for PET deface SVG reports.
 """
 
-import os
-import glob
 import argparse
-import webbrowser
-import json
+import glob
 import http.server
-import socketserver
-import time
-import subprocess
+import json
+import os
 import signal
+import socketserver
+import subprocess
 import sys
+import time
+import webbrowser
 from pathlib import Path
 
 # Handle imports for both script and module execution (including debugger)
@@ -181,18 +182,16 @@ def create_nifti_viewer_html(subject_id, nifti_files, output_dir, server_port=80
         # 2. PET defaced images that are averaged (wavg)
         # 3. PET defaced images that are warped
         # 4. PET defaced images that are in T1w space
-        if "defaced" in filename:
-            if "t1w" in filename:
-                # Include T1w defaced images
-                filtered_files.append(nifti_file)
-            elif "pet" in filename:
-                # For PET images, only include if they are averaged (wavg) or have special processing
-                if (
-                    "wavg" in filename
-                    or "warped" in filename
-                    or "space-t1w" in filename
-                ):
-                    filtered_files.append(nifti_file)
+        if "defaced" in filename and "t1w" in filename:
+            # Include T1w defaced images
+            filtered_files.append(nifti_file)
+        elif (
+            "defaced" in filename 
+            and "pet" in filename 
+            and any(term in filename for term in ("wavg", "warped", "space-t1w"))
+            ):
+            # For PET images, only include if they are averaged (wavg) or have special processing
+            filtered_files.append(nifti_file)
 
     if not filtered_files:
         print(f"No qualifying NIfTI files found for {subject_id}")

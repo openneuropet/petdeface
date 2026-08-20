@@ -1,11 +1,14 @@
-from nipype.interfaces.base import CommandLine
-from nipype.interfaces.base import CommandLineInputSpec
-from nipype.interfaces.base import Directory
-from nipype.interfaces.base import File
-from nipype.interfaces.base import TraitedSpec
-from nipype.interfaces.base import traits
-from nipype.interfaces.base import isdefined
 import os
+
+from nipype.interfaces.base import (
+    CommandLine,
+    CommandLineInputSpec,
+    Directory,
+    File,
+    TraitedSpec,
+    isdefined,
+    traits,
+)
 
 
 class MidefaceInputSpec(CommandLineInputSpec):

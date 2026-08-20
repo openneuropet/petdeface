@@ -1,10 +1,12 @@
-from flask import Flask, render_template, send_from_directory, request, abort
-import os
-import socket
 import argparse
 import json
+import os
+import socket
+import sys
 from glob import glob
 from pathlib import Path
+
+from flask import Flask, abort, render_template, request, send_from_directory
 
 
 def create_app(subjects):
@@ -46,7 +48,7 @@ def create_app(subjects):
         for comparison in scan_comparisons:
             for session in comparison["sessions"]:
                 # Remove any existing /file/ prefix first, then add it back
-                if session["nifti_path"].startswith("/file/"):
+                if session["nifti_path"].startswith("/file/"): #NOQA
                     session["nifti_path"] = session["nifti_path"][6:]  # Remove /file/
                 if session["nifti_path"].startswith("/"):
                     session["nifti_path"] = f"/file{session['nifti_path']}"
@@ -238,7 +240,7 @@ def build_subjects_from_datasets(original_dir, defaced_dir):
         )
     if not subjects:
         print("No matching NIfTI files found in both datasets.")
-        exit(1)
+        sys.exit(1)
     return subjects
 
 
@@ -313,7 +315,7 @@ if __name__ == "__main__":
                 print(
                     f"Error: --subject-list is not a valid file path or JSON string. {e}"
                 )
-                exit(1)
+                sys.exit(1)
     else:
         subjects = sample_subjects
 

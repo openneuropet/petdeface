@@ -1,29 +1,28 @@
+#! /usr/bin/env python
 import argparse
+import glob
 import json
 import os
 import pathlib
 import re
-import sys
 import shutil
-from bids import BIDSLayout, BIDSLayoutIndexer
-import glob
-from platform import system
-from pathlib import Path
 import subprocess
+import sys
+from importlib.metadata import version
+from pathlib import Path
+from platform import system
 from typing import Union
 
-
-from nipype.interfaces.freesurfer import MRICoreg, ApplyVolTransform
-from nipype.interfaces.io import DataSink
+from bids import BIDSLayout, BIDSLayoutIndexer
 from nipype.interfaces.base.traits_extension import File as traits_extensionFile
+from nipype.interfaces.freesurfer import ApplyVolTransform, MRICoreg
+from nipype.interfaces.io import DataSink
 from nipype.pipeline import Node
-from niworkflows.engine.workflows import LiterateWorkflow as Workflow
-from niworkflows.utils.bids import collect_data
-from niworkflows.utils.bids import collect_participants
-from niworkflows.utils.misc import check_valid_fs_license
 from nireports.interfaces.reporting.base import SimpleBeforeAfterRPT
+from niworkflows.engine.workflows import LiterateWorkflow as Workflow
+from niworkflows.utils.bids import collect_data, collect_participants
+from niworkflows.utils.misc import check_valid_fs_license
 from petutils.petutils import collect_anat_and_pet
-from importlib.metadata import version
 
 # Determine if we're running as a script (including through debugger)
 is_script = (
@@ -41,17 +40,17 @@ if is_script:
 
     # Import using absolute imports (script mode)
     from mideface import ApplyMideface, Mideface
+    from noanat import copy_default_anat_to_subject, remove_default_anat
     from pet import WeightedAverage
     from qa import run_qa
     from utils import run_validator
-    from noanat import copy_default_anat_to_subject, remove_default_anat
 else:
     # Running as module - use relative imports
     from .mideface import ApplyMideface, Mideface
+    from .noanat import copy_default_anat_to_subject, remove_default_anat
     from .pet import WeightedAverage
     from .qa import run_qa
     from .utils import run_validator
-    from .noanat import copy_default_anat_to_subject, remove_default_anat
 
 
 # collect version from pyproject.toml

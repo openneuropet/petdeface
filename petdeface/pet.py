@@ -2,10 +2,12 @@ import os
 
 import nibabel as nib
 import numpy as np
-from nipype.interfaces.base import BaseInterface
-from nipype.interfaces.base import BaseInterfaceInputSpec
-from nipype.interfaces.base import File
-from nipype.interfaces.base import TraitedSpec
+from nipype.interfaces.base import (
+    BaseInterface,
+    BaseInterfaceInputSpec,
+    File,
+    TraitedSpec,
+)
 from nipype.utils.filemanip import split_filename
 from niworkflows.interfaces.bids import ReadSidecarJSON
 
