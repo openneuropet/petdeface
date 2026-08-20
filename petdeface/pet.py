@@ -9,6 +9,10 @@ from nipype.interfaces.base import TraitedSpec
 from nipype.utils.filemanip import split_filename
 from niworkflows.interfaces.bids import ReadSidecarJSON
 
+try:
+    from numpy import trapz
+except (AttributeError, ImportError):
+    from numpy import trapezoid as trapz
 
 class WeightedAverageInputSpec(BaseInterfaceInputSpec):
     pet_file = File(exists=True, desc="Dynamic PET", mandatory=True)
@@ -69,7 +73,7 @@ class WeightedAverage(BaseInterface):
         frames_duration = np.array(meta.outputs.out_dict["FrameDuration"])
 
         mid_frames = frames_start + frames_duration / 2
-        wavg = np.trapz(data, x=mid_frames) / (mid_frames[-1] - mid_frames[0])
+        wavg = trapz(data, x=mid_frames) / (mid_frames[-1] - mid_frames[0])
 
         _, base, ext = split_filename(pet_file)
         out_name = base.replace("_pet", "_desc-wavg_pet")
