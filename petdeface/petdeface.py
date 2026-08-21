@@ -426,7 +426,7 @@ def init_single_subject_wf(
     # petutils.collect_anat_and_pet
     t1w_workflows = {}
     for t1w_file in set(subject_data.values()):
-        ses_id = re.search("ses-[^_|\/]*", t1w_file)
+        ses_id = re.search(r"ses-[^_|/]*", t1w_file)
         if ses_id:
             ses_id = f"{ses_id.group(0)}"
             anat_string = f"sub-{subject_id}_{ses_id}"
@@ -530,7 +530,7 @@ def init_single_subject_wf(
                         [
                             (
                                 "out_report",
-                                f"{anat_string.replace('_','.')}.anat@beforeafter",
+                                f"{anat_string.replace('_','.')}.anat.@beforeafter",
                             )
                         ]   
                     )
@@ -550,7 +550,7 @@ def init_single_subject_wf(
     else:
         for pet_file, t1w_file in subject_data.items():
             try:
-                ses_id = re.search("ses-[^_|\/]*", str(pet_file)).group(0)
+                ses_id = re.search(r"ses-[^_|/]*", str(pet_file)).group(0)
                 pet_string = f"sub-{subject_id}_{ses_id}"
             except AttributeError:
                 ses_id = ""
@@ -562,16 +562,16 @@ def init_single_subject_wf(
 
             # collect tracer for filename only
             tracer_info = ""
-            if re.search("trc-[^_|\/]*", str(pet_file)):
-                tracer_info = "_" + re.search("trc-[^_|\/]*", str(pet_file)).group(0)
+            if re.search(r"trc-[^_|/]*", str(pet_file)):
+                tracer_info = "_" + re.search(r"trc-[^_|/]*", str(pet_file)).group(0)
 
             # collect recontstruction
-            if re.search("rec-[^_|\/]*", str(pet_file)):
-                pet_string += "_" + re.search("rec-[^_|\/]*", str(pet_file)).group(0)
+            if re.search(r"rec-[^_|/]*", str(pet_file)):
+                pet_string += "_" + re.search(r"rec-[^_|/]*", str(pet_file)).group(0)
 
             # collect run info from pet file
             try:
-                run_id = "_" + re.search("run-[^_|\/]*", str(pet_file)).group(0)
+                run_id = "_" + re.search(r"run-[^_|/]*", str(pet_file)).group(0)
             except AttributeError:
                 run_id = ""
             # Create workflow name with tracer for uniqueness
@@ -614,15 +614,20 @@ def init_single_subject_wf(
 
             deface_pet = Node(ApplyMideface(in_file=pet_file), name="deface_pet")
 
-            # create simple before and after reports
-            t1w_before_after_report = Node(
-                SimpleBeforeAfterRPT(
-                    before_label="Faced T1w",
-                    after_label="Defaced T1w",
-                    out_report=f"{anat_string}_t1w_before_after.svg",
-                ),
-                name=f"{anat_string}_t1w_before_and_after_report",
+            t1w_report_name = f"{anat_string}_t1w_before_and_after_report"
+            t1w_before_after_report = t1w_workflows[t1w_file]["workflow"].get_node(
+                t1w_report_name
             )
+            if not t1w_before_after_report:
+                # create simple before and after reports        
+                t1w_before_after_report = Node(
+                    SimpleBeforeAfterRPT(
+                        before_label="Faced T1w",
+                        after_label="Defaced T1w",
+                        out_report=f"{anat_string}_t1w_before_after.svg",
+                    ),
+                    name=t1w_report_name,
+                )
 
             t1w_before_after_report.inputs.before = t1w_file
 
