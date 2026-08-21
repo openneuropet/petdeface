@@ -5,6 +5,9 @@ trap own_files ERR INT
 
 own_files()
 {
+    local command_status=$?
+    local platform uid gid
+
     platform=$(echo $GIVEN_INPUT | grep -oP 'system_platform=\K[^&]*')
     # if UID or GID is present in GIVEN_INPUT collect them and assign to variables
     if [[ $GIVEN_INPUT == *\-\-user=* ]]
@@ -13,18 +16,18 @@ own_files()
         gid=$(echo $GIVEN_INPUT | grep -oP '\-\-user=[0-9]*:\K[0-9]*')
     fi
 
-    # dont run any of this if the host system that initiated this container isn't linux as 
-    # docker running on windows or mac handles file ownership differently and we just don't 
-    # need to worry about root owning files there.
-    if [[ $platform != 'Linux' ]]
+    # Only Docker on Linux needs ownership correction. Apptainer/Singularity
+    # normally runs as the invoking user and does not provide this metadata.
+    # windows and mac handle permissions via their docker VM's
+    if [[ $platform != 'Linux' || -z $uid || -z $gid ]]
     then
-        return
-    fi 
+        return 0
+    fi
     
-    echo "petdeface container main process exited with code $?."
+    echo "petdeface container main process exited with code $command_status."
     echo "Changing ownership of files at /output directory to UID: $uid and GID: $gid"
-    chown $uid:$gid /output/
-    chown -R $uid:$gid /output
+    chown "$uid:$gid" /output/
+    chown -R "$uid:$gid" /output
 
 }
 
