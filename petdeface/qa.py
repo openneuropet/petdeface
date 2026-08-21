@@ -9,11 +9,9 @@ import glob
 import http.server
 import json
 import os
-import signal
+import socket
 import socketserver
-import subprocess
 import sys
-import time
 import webbrowser
 from pathlib import Path
 
@@ -67,36 +65,20 @@ def collect_svg_reports(defaced_dir, output_dir):
     return svg_files
 
 
-def kill_process_on_port(port):
-    """Kill any process using the specified port."""
-    try:
-        # Find process using the port
-        result = subprocess.run(
-            ["lsof", "-ti", str(port)], capture_output=True, text=True, check=False
-        )
+def find_available_port(preferred_port=8000):
+    """Return the first available TCP port at or above ``preferred_port``."""
+    if not 1024 <= preferred_port <= 65535:
+        raise ValueError("Port must be an unprivileged port between 1024 and 65535")
 
-        if result.returncode == 0 and result.stdout.strip():
-            pids = result.stdout.strip().split("\n")
-            for pid in pids:
-                if pid:
-                    print(f"Killing process {pid} using port {port}")
-                    try:
-                        os.kill(int(pid), signal.SIGKILL)
-                    except ProcessLookupError:
-                        print(f"Process {pid} already terminated")
-                    except ValueError:
-                        print(f"Invalid PID: {pid}")
+    for port in range(preferred_port, 65536):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as candidate:
+            try:
+                candidate.bind(("", port))
+            except OSError:
+                continue
+            return port
 
-            # Give it a moment to fully terminate
-            time.sleep(0.5)
-            print(f"Port {port} is now free")
-        else:
-            print(f"Port {port} is already free")
-
-    except FileNotFoundError:
-        print("Warning: 'lsof' command not found, cannot check for existing processes")
-    except Exception as e:
-        print(f"Error killing process on port {port}: {e}")
+    raise OSError(f"No available TCP ports at or above {preferred_port}")
 
 
 def start_local_server(port=8000, directory=None):
@@ -281,6 +263,26 @@ def create_nifti_viewer_html(subject_id, nifti_files, output_dir, server_port=80
         .reset-btn:hover {{
             background-color: #c82333;
             }}
+        .webgl-error {{
+            display: none;
+            max-width: 900px;
+            margin: 0 auto 30px;
+            padding: 20px;
+            border: 1px solid #b02a37;
+            border-radius: 8px;
+            background: #f8d7da;
+            color: #842029;
+        }}
+        .webgl-error code {{
+            display: block;
+            margin: 12px 0;
+            padding: 12px;
+            border-radius: 4px;
+            background: #fff;
+            color: #212529;
+            overflow-wrap: anywhere;
+            user-select: all;
+        }}
         </style>
     </head>
     <body>
@@ -288,6 +290,14 @@ def create_nifti_viewer_html(subject_id, nifti_files, output_dir, server_port=80
         <div class="comparison-title">{subject_id}</div>
         <div class="scan-type">Defaced NIfTI Images</div>
         </div>
+
+    <div id="webglError" class="webgl-error" role="alert">
+        <strong>Unable to start the 3D preview because WebGL2 is unavailable.</strong>
+        <p id="webglErrorDetail"></p>
+        <p>On a trusted GPU-less Linux system, relaunch Chrome with its CPU renderer:</p>
+        <code id="swiftShaderCommand"></code>
+        <a href="svg_reports.html">Open the static SVG QA reports instead</a>
+    </div>
         
     <div class="viewers-container">
 """
@@ -341,8 +351,33 @@ def create_nifti_viewer_html(subject_id, nifti_files, output_dir, server_port=80
         const subjectId = """
         + json.dumps(subject_id)
         + """;
+
+        function showWebGLError(error) {
+            const errorBox = document.getElementById('webglError');
+            const detail = document.getElementById('webglErrorDetail');
+            const command = document.getElementById('swiftShaderCommand');
+            const message = error instanceof Error ? error.message : String(error);
+
+            detail.textContent = message;
+            command.textContent = `google-chrome --user-data-dir=/tmp/petdeface-swiftshader --use-gl=angle --use-angle=swiftshader-webgl --enable-unsafe-swiftshader "${window.location.href}"`;
+            errorBox.style.display = 'block';
+        }
+
+        function webGL2Available() {
+            const testCanvas = document.createElement('canvas');
+            const context = testCanvas.getContext('webgl2');
+            if (!context) {
+                return false;
+            }
+            context.getExtension('WEBGL_lose_context')?.loseContext();
+            return true;
+        }
         
         async function setupViewers() {
+            if (!webGL2Available()) {
+                throw new Error('This browser could not create a WebGL2 context. Hardware acceleration may be unavailable or disabled.');
+            }
+
             for (let i = 0; i < niftiFiles.length; i++) {
                 const canvasId = `gl_${subjectId}_${i}`;
                 
@@ -435,7 +470,7 @@ def create_nifti_viewer_html(subject_id, nifti_files, output_dir, server_port=80
                     nv.drawScene();
                 });
             });
-        });
+        }).catch(showWebGLError);
     </script>
 </body>
 </html>
@@ -613,6 +648,14 @@ def run_qa(
     # Collect and create NIfTI viewers
     print("Collecting NIfTI files...")
     nifti_files_by_subject = collect_nifti_files(defaced_dir)
+
+    if start_server and nifti_files_by_subject:
+        requested_port = server_port
+        server_port = find_available_port(requested_port)
+        if server_port != requested_port:
+            print(
+                f"Port {requested_port} is in use; using port {server_port} instead."
+            )
 
     nifti_viewer_files = []
     if nifti_files_by_subject:
@@ -811,9 +854,6 @@ def run_qa(
         print(f"\nStarting HTTP server on port {server_port}...")
         print("This server is needed for NIfTI file access due to CORS restrictions.")
         print("Keep this terminal open while viewing NIfTI files.")
-
-        # Kill any existing process on the port
-        kill_process_on_port(server_port)
 
         # Get the derivatives directory to serve from
         derivatives_dir = os.path.join(os.path.dirname(output_dir), "..")
