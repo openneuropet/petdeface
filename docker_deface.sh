@@ -18,13 +18,13 @@ own_files()
     # need to worry about root owning files there.
     if [[ $platform != 'Linux' ]]
     then
-        echo "Host system is not linux. Not changing ownership of files at /output directory" 
-    else
-        echo "petdeface container main process exited with code $?."
-        echo "Changing ownership of files at /output directory to UID: $uid and GID: $gid"
-        chown $uid:$gid /output/
-        chown -R $uid:$gid /output
-    fi
+        return
+    fi 
+    
+    echo "petdeface container main process exited with code $?."
+    echo "Changing ownership of files at /output directory to UID: $uid and GID: $gid"
+    chown $uid:$gid /output/
+    chown -R $uid:$gid /output
 
 }
 
