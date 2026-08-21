@@ -330,7 +330,7 @@ def create_nifti_viewer_html(subject_id, nifti_files, output_dir, server_port=80
     <div class="controls">
         <div class="slider-container">
             <label for="rotationSlider">Rotate: </label>
-            <input type="range" id="rotationSlider" min="0" max="36000" value="0" class="slider">
+            <input type="range" id="rotationSlider" min="0" max="360" value="0" class="slider">
             <span id="rotationValue">0</span>
         </div>
         <button id="resetView" class="reset-btn">Reset View</button>
@@ -359,7 +359,7 @@ def create_nifti_viewer_html(subject_id, nifti_files, output_dir, server_port=80
             const message = error instanceof Error ? error.message : String(error);
 
             detail.textContent = message;
-            command.textContent = `google-chrome --user-data-dir=/tmp/petdeface-swiftshader --use-gl=angle --use-angle=swiftshader-webgl --enable-unsafe-swiftshader "${window.location.href}"`;
+            command.textContent = `google-chrome --user-data-dir=/tmp/petdeface-swiftshader --disable-background-networking --log-level=3 --use-gl=angle --use-angle=swiftshader-webgl --enable-unsafe-swiftshader "${window.location.href}"`;
             errorBox.style.display = 'block';
         }
 
@@ -451,10 +451,8 @@ def create_nifti_viewer_html(subject_id, nifti_files, output_dir, server_port=80
             slider.addEventListener('input', () => {
                 const deg = parseFloat(slider.value);
                 valueSpan.textContent = deg;
-                const rad = deg * Math.PI / 180;
                 viewers.forEach(nv => {
-                    nv.scene.renderAzimuth = rad;
-                    nv.drawScene();
+                    nv.setRenderAzimuthElevation(deg, nv.scene.renderElevation);
                 });
             });
             
@@ -462,8 +460,7 @@ def create_nifti_viewer_html(subject_id, nifti_files, output_dir, server_port=80
                 slider.value = 0;
                 valueSpan.textContent = 0;
                 viewers.forEach(nv => {
-                    nv.scene.renderAzimuth = 0;
-                    nv.scene.renderElevation = 0;
+                    nv.setRenderAzimuthElevation(0, 0);
                     nv.scene.volScaleMultiplier = 1;
                     nv.scene.pan2Dxyz = [0.5, 0.5, 0.5];
                     nv.setSliceType(nv.sliceTypeRender);
