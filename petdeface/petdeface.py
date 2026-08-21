@@ -489,6 +489,15 @@ def init_single_subject_wf(
                 ),
                 name=f"deface_t1w_{anat_string}",
             )
+            t1w_before_after_report = Node(
+                SimpleBeforeAfterRPT(
+                    before_label="Faced T1w",
+                    after_label="Defaced T1w",
+                    out_report=f"{anat_string}_t1w_before_after.svg",
+                ),
+                name=f"{anat_string}_t1w_before_and_after_report"
+            )
+            t1w_before_after_report.inputs.before = t1w_file
             t1w_wf.connect(
                 [
                     (
@@ -510,6 +519,21 @@ def init_single_subject_wf(
                             ),
                         ],
                     ),
+                    (
+                        deface_t1w,
+                        t1w_before_after_report,
+                        [("out_file", "after")],
+                    ),
+                    (
+                        t1w_before_after_report,
+                        datasink,
+                        [
+                            (
+                                "out_report",
+                                f"{anat_string.replace('_','.')}.anat@beforeafter",
+                            )
+                        ]   
+                    )
                 ]
             )
 
@@ -1021,7 +1045,7 @@ def wrap_up_defacing(
             desc="defaced",
             return_type="file",
         )
-        if str(os.getenv("PETDEFAC_DEBUG", "false")).lower() != "true":
+        if str(os.getenv("PETDEFACE_DEBUG", "false")).lower() != "true":
             for extraneous in derivatives:
                 os.remove(extraneous)
 
@@ -1072,19 +1096,13 @@ def move_defaced_images(
             defaced.path.replace(common_path, str(final_destination))
         )
 
-        if "_defaced." in str(new_path):
-            new_path = pathlib.Path(str(new_path).replace("_defaced.", "."))
+        if "_defaced." in str(new_path.name):
+            new_path = pathlib.Path(new_path).with_name(new_path.name.replace("_defaced.", "."))
+            #new_path = pathlib.Path(str(new_path).replace("_defaced.", "."))
 
         # replace derivative and pet deface parts of path
-        new_path = pathlib.Path(
-            *(
-                [
-                    part
-                    for part in new_path.parts
-                    if part != "derivatives" and part != "petdeface"
-                ]
-            )
-        )
+        raw_relative_path = pathlib.Path(raw.path).relative_to(common_path)
+        new_path = pathlib.Path(final_destination) / raw_relative_path
         dest_mapping[defaced] = new_path
 
     # copy defaced images to new location
