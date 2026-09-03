@@ -1,13 +1,14 @@
 """Functionality for handling cases where anatomical images are not available."""
 
-import nibabel
-import numpy
-import shutil
 import os
 import re
+import shutil
 import tempfile
 from pathlib import Path
-from typing import Union, Dict, Optional
+from typing import Dict, Optional, Union  # NOQA
+
+import nibabel
+import numpy
 
 
 def get_data_path(filename: str) -> Path:

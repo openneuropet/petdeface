@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>NiiVue Viewer</title>
+    <style>
+        body { margin: 0; padding: 0; background: white; }
+        canvas { display: block; margin: 0 auto; }
+    </style>
+</head>
+<body>
+    <canvas id="gl_canvas" width="640" height="640"></canvas>
+    <script type="module">
+        import { Niivue } from "https://unpkg.com/@niivue/niivue@0.57.0/dist/index.js";
+        const nv = new Niivue();
+        nv.attachTo('gl_canvas');
+        nv.loadVolumes([{ url: "{{ nifti_url }}" }]);
+    </script>
+</body>
+</html> 

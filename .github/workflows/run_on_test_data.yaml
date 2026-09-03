@@ -21,7 +21,8 @@ env:
   FREESURFER_HOME: "/usr/local/freesurfer/7.4.1"
 jobs: 
   run-petdeface-on-data:
-    runs-on: self-hosted
+    runs-on: 
+      - self-hosted
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4

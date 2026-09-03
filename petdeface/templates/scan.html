@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>NiiVue - {{ comparison.subject_id }} {{ comparison.scan_type.upper() }}</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 0;
+        padding: 20px;
+        background-color: #f0f0f0;
+      }
+      .header {
+        text-align: center;
+        margin-bottom: 30px;
+      }
+      .back-link {
+        display: inline-block;
+        margin-bottom: 20px;
+        padding: 10px 20px;
+        background-color: #007bff;
+        color: white;
+        text-decoration: none;
+        border-radius: 5px;
+      }
+      .back-link:hover {
+        background-color: #0056b3;
+      }
+      .comparison-title {
+        font-size: 2.5em;
+        font-weight: bold;
+        margin: 20px 0;
+        color: #333;
+      }
+      .scan-type {
+        font-size: 1.5em;
+        color: #007bff;
+        font-weight: bold;
+        margin-bottom: 20px;
+        text-transform: uppercase;
+      }
+      .viewers-container {
+        display: flex;
+        gap: 30px;
+        justify-content: center;
+        flex-wrap: wrap;
+      }
+      .viewer {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        background: white;
+        padding: 20px;
+        border-radius: 10px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      }
+      .viewer-title {
+        font-size: 1.5em;
+        font-weight: bold;
+        margin-bottom: 15px;
+        color: #333;
+        text-align: center;
+      }
+      .file-path {
+        font-size: 0.9em;
+        color: #666;
+        margin-bottom: 15px;
+        text-align: center;
+        max-width: 500px;
+        word-break: break-all;
+      }
+      canvas {
+        border: 2px solid #ddd;
+        border-radius: 5px;
+      }
+      .controls {
+        margin-top: 30px;
+        text-align: center;
+      }
+      .slider-container {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 15px;
+        margin-bottom: 20px;
+      }
+      .slider {
+        width: 300px;
+      }
+      .reset-btn {
+        padding: 10px 20px;
+        background-color: #dc3545;
+        color: white;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+        font-size: 1em;
+      }
+      .reset-btn:hover {
+        background-color: #c82333;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="header">
+      <a href="/" class="back-link">← Back to All Comparisons</a>
+      <div class="comparison-title">{{ comparison.subject_id }}</div>
+      <div class="scan-type">{{ comparison.scan_type.upper() }}</div>
+    </div>
+    
+    <div class="viewers-container">
+      {% for session in comparison.sessions %}
+        <div class="viewer">
+          <div class="viewer-title">{{ session.label }}</div>
+          <div class="file-path">
+            {{ session.nifti_path.replace('/file', '') if session.nifti_path.startswith('/file') else session.nifti_path }}
+          </div>
+          <canvas id="gl_{{ comparison.subject_id }}_{{ session.label }}" width="640" height="640"></canvas>
+        </div>
+      {% endfor %}
+    </div>
+    
+    <div class="controls">
+      <div class="slider-container">
+        <label for="rotationSlider">Rotate: </label>
+        <input type="range" id="rotationSlider" min="0" max="36000" value="0" class="slider">
+        <span id="rotationValue">0</span>
+      </div>
+      <button id="resetView" class="reset-btn">Reset View</button>
+    </div>
+
+    <script type="module" async>
+      import { Niivue } from "https://unpkg.com/@niivue/niivue@0.57.0/dist/index.js"
+      
+      const comparison = {{ comparison | tojson }};
+      const viewers = [];
+      
+      async function setupViewers() {
+        for (const session of comparison.sessions) {
+          const canvasId = `gl_${comparison.subject_id}_${session.label}`;
+          
+          // Create Niivue instance
+          const nv = new Niivue({ 
+            isResizeCanvas: false,
+            isHighQualityCapable: true,
+            isMultiplanar: false,
+            isRadiological: false
+          });
+          
+          await nv.attachTo(canvasId);
+          
+          // Configure viewer
+          nv.setSliceType(nv.sliceTypeRender);
+          nv.dragMode = "none";
+          nv.opts.pointerInteraction = false;
+          nv.opts.isMouseWheel = false;
+          nv.opts.isColorbar = false;
+          nv.opts.isResizeCanvas = false;
+          nv.opts.isDrag = false;
+          
+          // Load volume
+          try {
+            // Extract file extension from the path
+            const pathParts = session.nifti_path.split('/');
+            const filename = pathParts[pathParts.length - 1];
+            const fileExt = filename.includes('.nii.gz') ? '.nii.gz' : 
+                           filename.includes('.nii') ? '.nii' : '.nii.gz';
+            
+            await nv.loadVolumes([{ 
+              url: session.nifti_path,
+              name: `volume_${canvasId}${fileExt}`
+            }]);
+            nv.drawScene();
+            console.log(`Loaded volume for ${canvasId}`);
+          } catch (error) {
+            console.error(`Error loading volume for ${canvasId}:`, error);
+          }
+          
+          // Remove event listeners
+          const canvasElement = nv.canvas;
+          canvasElement.onwheel = null;
+          canvasElement.onmousedown = null;
+          canvasElement.onmousemove = null;
+          canvasElement.onmouseup = null;
+          canvasElement.onclick = null;
+          canvasElement.ondblclick = null;
+          canvasElement.oncontextmenu = null;
+          canvasElement.onpointerdown = null;
+          canvasElement.onpointermove = null;
+          canvasElement.onpointerup = null;
+          canvasElement.onpointerleave = null;
+          canvasElement.onpointerenter = null;
+          canvasElement.onpointercancel = null;
+          canvasElement.onmouseenter = null;
+          canvasElement.onmouseleave = null;
+          canvasElement.onmouseout = null;
+          canvasElement.onmouseover = null;
+          
+          viewers.push(nv);
+        }
+      }
+      
+      setupViewers().then(() => {
+        // Set up controls
+        const slider = document.getElementById('rotationSlider');
+        const valueSpan = document.getElementById('rotationValue');
+        const resetBtn = document.getElementById('resetView');
+        
+        slider.addEventListener('input', () => {
+          const deg = parseFloat(slider.value);
+          valueSpan.textContent = deg;
+          const rad = deg * Math.PI / 180;
+          viewers.forEach(nv => {
+            nv.scene.renderAzimuth = rad;
+            nv.drawScene();
+          });
+        });
+        
+        resetBtn.addEventListener('click', () => {
+          slider.value = 0;
+          valueSpan.textContent = 0;
+          viewers.forEach(nv => {
+            nv.scene.renderAzimuth = 0;
+            nv.scene.renderElevation = 0;
+            nv.scene.volScaleMultiplier = 1;
+            nv.scene.pan2Dxyz = [0.5, 0.5, 0.5];
+            nv.setSliceType(nv.sliceTypeRender);
+            nv.drawScene();
+          });
+        });
+      });
+    </script>
+  </body>
+</html> 

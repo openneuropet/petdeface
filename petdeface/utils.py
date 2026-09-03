@@ -1,9 +1,8 @@
 """Utility functions for the petdeface package."""
+import json
+import subprocess
 from importlib import resources
 from pathlib import Path
-import subprocess
-from pathlib import Path
-import json
 
 
 def get_data_path(filename: str) -> Path:

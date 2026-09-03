@@ -29,3 +29,11 @@ petdeface.petdeface module
     :members:
     :undoc-members:
     :show-inheritance:
+
+petdeface.qa module
+------------------
+
+.. automodule:: petdeface.qa
+    :members:
+    :undoc-members:
+    :show-inheritance:
