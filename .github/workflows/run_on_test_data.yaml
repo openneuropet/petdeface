@@ -22,8 +22,7 @@ env:
 jobs: 
   run-petdeface-on-data:
     runs-on: 
-      #- self-hosted
-      - codebuild-petdeface-${{ github.run_id }}-${{ github.run_attempt }}
+      - self-hosted
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
